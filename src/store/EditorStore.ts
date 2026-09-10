@@ -121,11 +121,26 @@ export const useEditorStore = create<EditorState>((set) => ({
    */
   updateElementPosition: (id, x, y) =>
     set((state) => ({
-      elements: state.elements.map((el) =>
-        el.id === id
-          ? { ...el, transform: { ...el.transform, x, y } }
-          : el
-      ),
+      elements: state.elements.map((el) => {
+        if (el.id !== id) return el
+
+        const deltaX = x - el.transform.x
+        const deltaY = y - el.transform.y
+        const nextElement = {
+          ...el,
+          transform: { ...el.transform, x, y },
+        }
+
+        if (el.type !== 'line') return nextElement
+
+        return {
+          ...nextElement,
+          x1: (el.x1 ?? 0) + deltaX,
+          y1: (el.y1 ?? 0) + deltaY,
+          x2: (el.x2 ?? 0) + deltaX,
+          y2: (el.y2 ?? 0) + deltaY,
+        }
+      }),
     })),
 
   // ---- Selection actions ----

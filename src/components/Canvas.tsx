@@ -24,8 +24,12 @@
 
 import { useRef, useState, useEffect } from 'react'
 import { useEditorStore } from '../store/EditorStore'
-import { createRectElement } from '../types/canvas'
+import type { CanvasElement } from '../types/canvas'
 import { useSelectTool } from '../tools/useSelectTool'
+import { useRectTool } from '../tools/useRectTool'
+import { useEllipseTool } from '../tools/useEllipseTool'
+import { useLineTool } from '../tools/useLineTool'
+import { usePolylineTool } from '../tools/usePolylineTool'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -34,9 +38,6 @@ import { useSelectTool } from '../tools/useSelectTool'
 const CANVAS_WIDTH  = 800
 const CANVAS_HEIGHT = 600
 const GRID_SIZE     = 20
-
-/** Minimum drag size to commit a drawn shape. Prevents accidental 0×0 shapes. */
-const MIN_DRAW_SIZE = 2
 
 /** Selection outline padding around element bounding box (SVG units). */
 const SELECTION_PADDING = 4
@@ -47,7 +48,30 @@ const TOOL_CURSORS: Record<string, string> = {
   rect:    'crosshair',
   ellipse: 'crosshair',
   line:    'crosshair',
+  polyline: 'crosshair',
   pen:     'crosshair',
+}
+
+function getElementBounds(element: CanvasElement) {
+  if (element.type === 'polyline' && element.points && element.points.length > 0) {
+    const xValues = element.points.map((point) => point.x)
+    const yValues = element.points.map((point) => point.y)
+    const x = Math.min(...xValues)
+    const y = Math.min(...yValues)
+    return {
+      x,
+      y,
+      width: Math.max(...xValues) - x,
+      height: Math.max(...yValues) - y,
+    }
+  }
+
+  return {
+    x: element.transform.x,
+    y: element.transform.y,
+    width: element.transform.width,
+    height: element.transform.height,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -59,7 +83,6 @@ function Canvas() {
   const activeTool         = useEditorStore((s) => s.activeTool)
   const elements           = useEditorStore((s) => s.elements)
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds)
-  const addElement         = useEditorStore((s) => s.addElement)
   const setActiveTool      = useEditorStore((s) => s.setActiveTool)
   const clearSelection     = useEditorStore((s) => s.clearSelection)
 
@@ -72,30 +95,38 @@ function Canvas() {
   // Each tool hook owns its own internal state and returns event handlers.
   // Canvas just calls them and wires up the returned handlers.
   const selectTool = useSelectTool(svgRef)
+  const rectTool = useRectTool(svgRef)
+  const ellipseTool = useEllipseTool(svgRef)
+  const lineTool = useLineTool(svgRef)
+  const polylineTool = usePolylineTool(svgRef)
 
-  // ---- Local state (rect tool drawing — will move to useRectTool in Week 3) ----
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
-  const [previewRect, setPreviewRect] = useState<{
-    x: number; y: number; width: number; height: number
-  } | null>(null)
-  const [isDrawing, setIsDrawing]   = useState(false)
-  const [drawStart, setDrawStart]   = useState({ x: 0, y: 0 })
 
   // ---- Keyboard shortcuts ----
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
       switch (e.key) {
-        case 'Escape': clearSelection(); break
+        case 'Escape':
+          if (activeTool === 'polyline' && polylineTool.isDrawing) {
+            polylineTool.cancel()
+          } else {
+            clearSelection()
+          }
+          break
+        case 'Enter':
+          if (activeTool === 'polyline') polylineTool.commit()
+          break
         case 'v': case 'V': setActiveTool('select'); break
         case 'r': case 'R': setActiveTool('rect');   break
+        case 'y': case 'Y': setActiveTool('polyline'); break
       }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [clearSelection, setActiveTool])
+  }, [activeTool, clearSelection, polylineTool, setActiveTool])
 
-  // ---- Coordinate conversion (Canvas-level, used for rect drawing) ----
+  // ---- Coordinate conversion (Canvas-level, used for the mouse readout) ----
   const toSVGPoint = (e: React.MouseEvent<SVGSVGElement>) => {
     const svg = svgRef.current
     if (!svg) return { x: 0, y: 0 }
@@ -110,27 +141,19 @@ function Canvas() {
   // ---- SVG-level event handlers (the dispatcher) ----
 
   const handleSVGMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (activeTool !== 'rect') return
-    if (e.button !== 0) return // left button only
-
-    const pt = toSVGPoint(e)
-    setDrawStart(pt)
-    setIsDrawing(true)
-    setPreviewRect({ x: pt.x, y: pt.y, width: 0, height: 0 })
+    if (activeTool === 'rect') rectTool.onMouseDown(e)
+    if (activeTool === 'ellipse') ellipseTool.onMouseDown(e)
+    if (activeTool === 'line') lineTool.onMouseDown(e)
   }
 
   const handleSVGMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const pt = toSVGPoint(e)
     setMousePosition({ x: Math.round(pt.x), y: Math.round(pt.y) })
 
-    if (activeTool === 'rect' && isDrawing) {
-      // Update the draw preview
-      const x      = Math.min(drawStart.x, pt.x)
-      const y      = Math.min(drawStart.y, pt.y)
-      const width  = Math.abs(pt.x - drawStart.x)
-      const height = Math.abs(pt.y - drawStart.y)
-      setPreviewRect({ x, y, width, height })
-    }
+    if (activeTool === 'rect') rectTool.onMouseMove(e)
+    if (activeTool === 'ellipse') ellipseTool.onMouseMove(e)
+    if (activeTool === 'line') lineTool.onMouseMove(e)
+    if (activeTool === 'polyline') polylineTool.onMouseMove(e)
 
     if (activeTool === 'select') {
       // Delegate to select tool — handles real-time drag movement
@@ -138,22 +161,10 @@ function Canvas() {
     }
   }
 
-   const handleSVGMouseUp = (_e: React.MouseEvent<SVGSVGElement>) => {    if (activeTool === 'rect' && isDrawing) {
-      if (
-        previewRect &&
-        previewRect.width  > MIN_DRAW_SIZE &&
-        previewRect.height > MIN_DRAW_SIZE
-      ) {
-        addElement(createRectElement(
-          previewRect.x,
-          previewRect.y,
-          previewRect.width,
-          previewRect.height
-        ))
-      }
-      setPreviewRect(null)
-      setIsDrawing(false)
-    }
+  const handleSVGMouseUp = (_e: React.MouseEvent<SVGSVGElement>) => {
+    if (activeTool === 'rect') rectTool.onMouseUp()
+    if (activeTool === 'ellipse') ellipseTool.onMouseUp()
+    if (activeTool === 'line') lineTool.onMouseUp()
 
     if (activeTool === 'select') {
       // Delegate to select tool — resolves click vs drag ambiguity
@@ -161,11 +172,16 @@ function Canvas() {
     }
   }
 
-  const handleSVGClick = () => {
+  const handleSVGClick = (e: React.MouseEvent<SVGSVGElement>) => {
     if (activeTool === 'select') {
       // Only fires on empty canvas (shapes call stopPropagation)
       selectTool.onCanvasClick()
     }
+    if (activeTool === 'polyline') polylineTool.onCanvasClick(e)
+  }
+
+  const handleSVGDoubleClick = () => {
+    if (activeTool === 'polyline') polylineTool.onDoubleClick()
   }
 
   // ---- Render ----
@@ -183,6 +199,7 @@ function Canvas() {
         onMouseMove={handleSVGMouseMove}
         onMouseUp={handleSVGMouseUp}
         onClick={handleSVGClick}
+        onDoubleClick={handleSVGDoubleClick}
       >
 
         {/* ── Grid ─────────────────────────────────────────────────────── */}
@@ -233,6 +250,82 @@ function Canvas() {
                 />
               )
             }
+            if (el.type === 'ellipse') {
+              return (
+                <ellipse
+                  key={el.id}
+                  cx={el.transform.x + el.transform.width / 2}
+                  cy={el.transform.y + el.transform.height / 2}
+                  rx={el.transform.width / 2}
+                  ry={el.transform.height / 2}
+                  fill={el.style.fill}
+                  fillOpacity={el.style.fillOpacity}
+                  stroke={el.style.stroke}
+                  strokeWidth={el.style.strokeWidth}
+                  style={{
+                    cursor: activeTool === 'select' ? 'move' : 'crosshair',
+                  }}
+                  onMouseDown={(e) => {
+                    if (activeTool === 'select') {
+                      selectTool.onElementMouseDown(e, el.id)
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              )
+            }
+            if (el.type === 'line') {
+              return (
+                <line
+                  key={el.id}
+                  x1={el.x1}
+                  y1={el.y1}
+                  x2={el.x2}
+                  y2={el.y2}
+                  fill="none"
+                  stroke={el.style.stroke}
+                  strokeWidth={el.style.strokeWidth}
+                  strokeOpacity={el.style.strokeOpacity}
+                  strokeDasharray={el.style.strokeDashArray}
+                  strokeLinecap={el.style.strokeLineCap}
+                  strokeLinejoin={el.style.strokeLineJoin}
+                  style={{
+                    cursor: activeTool === 'select' ? 'move' : 'crosshair',
+                  }}
+                  onMouseDown={(e) => {
+                    if (activeTool === 'select') {
+                      selectTool.onElementMouseDown(e, el.id)
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              )
+            }
+            if (el.type === 'polyline' && el.points) {
+              return (
+                <polyline
+                  key={el.id}
+                  points={el.points.map((point) => `${point.x},${point.y}`).join(' ')}
+                  fill={el.style.fill}
+                  fillOpacity={el.style.fillOpacity}
+                  stroke={el.style.stroke}
+                  strokeWidth={el.style.strokeWidth}
+                  strokeOpacity={el.style.strokeOpacity}
+                  strokeDasharray={el.style.strokeDashArray}
+                  strokeLinecap={el.style.strokeLineCap}
+                  strokeLinejoin={el.style.strokeLineJoin}
+                  style={{
+                    cursor: activeTool === 'select' ? 'move' : 'crosshair',
+                  }}
+                  onMouseDown={(e) => {
+                    if (activeTool === 'select') {
+                      selectTool.onElementMouseDown(e, el.id)
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              )
+            }
             return null
           })}
         </g>
@@ -245,28 +338,31 @@ function Canvas() {
         <g id="selection-overlay" pointerEvents="none">
           {elements
             .filter((el) => selectedElementIds.includes(el.id))
-            .map((el) => (
-              <rect
-                key={el.id}
-                x={el.transform.x       - SELECTION_PADDING}
-                y={el.transform.y       - SELECTION_PADDING}
-                width={el.transform.width  + SELECTION_PADDING * 2}
-                height={el.transform.height + SELECTION_PADDING * 2}
-                fill="none"
-                stroke="#2563eb"
-                strokeWidth="1.5"
-                strokeDasharray="6 4"
-              />
-            ))}
+            .map((el) => {
+              const bounds = getElementBounds(el)
+              return (
+                <rect
+                  key={el.id}
+                  x={bounds.x - SELECTION_PADDING}
+                  y={bounds.y - SELECTION_PADDING}
+                  width={bounds.width + SELECTION_PADDING * 2}
+                  height={bounds.height + SELECTION_PADDING * 2}
+                  fill="none"
+                  stroke="#2563eb"
+                  strokeWidth="1.5"
+                  strokeDasharray="6 4"
+                />
+              )
+            })}
         </g>
 
-        {/* ── Draw preview (rect tool ghost) ────────────────────────────── */}
-        {previewRect && (
+        {/* ── Draw previews ─────────────────────────────────────────────── */}
+        {rectTool.previewRect && (
           <rect
-            x={previewRect.x}
-            y={previewRect.y}
-            width={previewRect.width}
-            height={previewRect.height}
+            x={rectTool.previewRect.x}
+            y={rectTool.previewRect.y}
+            width={rectTool.previewRect.width}
+            height={rectTool.previewRect.height}
             fill="#93c5fd"
             fillOpacity={0.4}
             stroke="#2563eb"
@@ -274,6 +370,59 @@ function Canvas() {
             strokeDasharray="5 5"
             pointerEvents="none"
           />
+        )}
+
+        {ellipseTool.previewEllipse && (
+          <ellipse
+            cx={ellipseTool.previewEllipse.x + ellipseTool.previewEllipse.width / 2}
+            cy={ellipseTool.previewEllipse.y + ellipseTool.previewEllipse.height / 2}
+            rx={ellipseTool.previewEllipse.width / 2}
+            ry={ellipseTool.previewEllipse.height / 2}
+            fill="#93c5fd"
+            fillOpacity={0.4}
+            stroke="#2563eb"
+            strokeWidth="1.5"
+            strokeDasharray="5 5"
+            pointerEvents="none"
+          />
+        )}
+
+        {lineTool.previewLine && (
+          <line
+            x1={lineTool.previewLine.x1}
+            y1={lineTool.previewLine.y1}
+            x2={lineTool.previewLine.x2}
+            y2={lineTool.previewLine.y2}
+            stroke="#2563eb"
+            strokeWidth="1.5"
+            strokeDasharray="5 5"
+            pointerEvents="none"
+          />
+        )}
+
+        {polylineTool.isDrawing && polylineTool.points.length > 0 && (
+          <>
+            <polyline
+              points={polylineTool.points.map((point) => `${point.x},${point.y}`).join(' ')}
+              fill="none"
+              stroke="#2563eb"
+              strokeWidth="1.5"
+              strokeDasharray="5 5"
+              pointerEvents="none"
+            />
+            {polylineTool.previewPoint && (
+              <line
+                x1={polylineTool.points[polylineTool.points.length - 1].x}
+                y1={polylineTool.points[polylineTool.points.length - 1].y}
+                x2={polylineTool.previewPoint.x}
+                y2={polylineTool.previewPoint.y}
+                stroke="#2563eb"
+                strokeWidth="1.5"
+                strokeDasharray="5 5"
+                pointerEvents="none"
+              />
+            )}
+          </>
         )}
 
       </svg>

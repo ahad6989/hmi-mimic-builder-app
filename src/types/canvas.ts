@@ -15,6 +15,7 @@ export type Tool =
   | 'rect'
   | 'ellipse'
   | 'line'
+  | 'polyline'
   | 'pen'
 
 // ---------------------------------------------------------------------------
@@ -90,6 +91,10 @@ export interface CanvasElement {
   // --- Type-specific optional fields ---
   rx?: number             // Horizontal corner radius (rect only)
   ry?: number             // Vertical corner radius   (rect only)
+  x1?: number             // First endpoint x-coordinate (line only)
+  y1?: number             // First endpoint y-coordinate (line only)
+  x2?: number             // Second endpoint x-coordinate (line only)
+  y2?: number             // Second endpoint y-coordinate (line only)
   points?: Array<{ x: number; y: number }>  // Polyline / line endpoints
   pathData?: string       // SVG path 'd' attribute  (path / pencil only)
   textContent?: string    // Text element content    (text only)
@@ -130,5 +135,97 @@ export function createRectElement(
     locked: false,
     transform: { x, y, width, height, rotation: 0 },
     style: { ...DEFAULT_STYLE, ...overrides },
+  }
+}
+
+/** Create a ready-to-store ellipse element from its center and radii. */
+export function createEllipseElement(
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  overrides: Partial<StyleAttributes> = {}
+): CanvasElement {
+  return {
+    id: crypto.randomUUID(),
+    name: 'Ellipse',
+    type: 'ellipse',
+    visible: true,
+    locked: false,
+    transform: {
+      x: cx - rx,
+      y: cy - ry,
+      width: rx * 2,
+      height: ry * 2,
+      rotation: 0,
+    },
+    style: { ...DEFAULT_STYLE, ...overrides },
+  }
+}
+
+/** Create a ready-to-store line element from two endpoints. */
+export function createLineElement(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+): CanvasElement {
+  const x = Math.min(x1, x2)
+  const y = Math.min(y1, y2)
+
+  return {
+    id: crypto.randomUUID(),
+    name: 'Line',
+    type: 'line',
+    visible: true,
+    locked: false,
+    transform: {
+      x,
+      y,
+      width: Math.abs(x2 - x1),
+      height: Math.abs(y2 - y1),
+      rotation: 0,
+    },
+    style: {
+      ...DEFAULT_STYLE,
+      fill: 'none',
+    },
+    x1,
+    y1,
+    x2,
+    y2,
+  }
+}
+
+/** Create a ready-to-store polyline element from an ordered point list. */
+export function createPolylineElement(
+  points: Array<{ x: number; y: number }>
+): CanvasElement {
+  const copiedPoints = points.map((point) => ({ x: point.x, y: point.y }))
+  const xValues = copiedPoints.map((point) => point.x)
+  const yValues = copiedPoints.map((point) => point.y)
+  const x = xValues.length > 0 ? Math.min(...xValues) : 0
+  const y = yValues.length > 0 ? Math.min(...yValues) : 0
+  const maxX = xValues.length > 0 ? Math.max(...xValues) : 0
+  const maxY = yValues.length > 0 ? Math.max(...yValues) : 0
+
+  return {
+    id: crypto.randomUUID(),
+    name: 'Polyline',
+    type: 'polyline',
+    visible: true,
+    locked: false,
+    transform: {
+      x,
+      y,
+      width: maxX - x,
+      height: maxY - y,
+      rotation: 0,
+    },
+    style: {
+      ...DEFAULT_STYLE,
+      fill: 'none',
+    },
+    points: copiedPoints,
   }
 }

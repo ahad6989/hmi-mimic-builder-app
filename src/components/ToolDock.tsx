@@ -34,6 +34,7 @@ const TOOLS: ToolConfig[] = [
   { tool: 'rect',    label: '▭', shortcut: 'R', title: 'Rectangle (R)' },
   { tool: 'ellipse', label: '◯', shortcut: 'O', title: 'Ellipse (O)' },
   { tool: 'line',    label: '╱', shortcut: 'L', title: 'Line (L)' },
+  { tool: 'polyline', label: '⌁', shortcut: 'Y', title: 'Polyline (Y)' },
   { tool: 'pen',     label: '✒', shortcut: 'P', title: 'Pen (P)' },
 ]
 
