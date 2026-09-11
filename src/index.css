@@ -1,1 +1,21 @@
 @import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+	--canvas-background: #f8fafc;
+	--canvas-grid: #cbd5e1;
+	--canvas-default-fill: #334155;
+	--canvas-default-stroke: #334155;
+	--canvas-preview-fill: #cbd5e1;
+	--canvas-preview-stroke: #334155;
+}
+
+.dark {
+	--canvas-background: #1e293b;
+	--canvas-grid: #475569;
+	--canvas-default-fill: #e2e8f0;
+	--canvas-default-stroke: #e2e8f0;
+	--canvas-preview-fill: #475569;
+	--canvas-preview-stroke: #cbd5e1;
+}

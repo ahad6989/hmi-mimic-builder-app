@@ -109,9 +109,9 @@ export interface CanvasElement {
 
 /** Default style every new shape gets. Override as needed. */
 export const DEFAULT_STYLE: StyleAttributes = {
-  fill: '#60a5fa',
+  fill: 'var(--canvas-default-fill)',
   fillOpacity: 1,
-  stroke: '#2563eb',
+  stroke: 'var(--canvas-default-stroke)',
   strokeWidth: 2,
   strokeOpacity: 1,
   strokeDashArray: '',

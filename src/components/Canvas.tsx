@@ -186,15 +186,18 @@ function Canvas() {
 
   // ---- Render ----
   return (
-    <main className="flex-1 overflow-hidden relative" style={{ background: '#e5e7eb' }}>
+    <main className="relative flex-1 overflow-hidden bg-slate-200 transition-colors dark:bg-slate-950">
 
       <svg
         ref={svgRef}
         width="100%"
         height="100%"
         viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
-        className="bg-white"
-        style={{ cursor: TOOL_CURSORS[activeTool] ?? 'default' }}
+        className="border border-slate-300 shadow-sm dark:border-slate-700"
+        style={{
+          cursor: TOOL_CURSORS[activeTool] ?? 'default',
+          backgroundColor: 'var(--canvas-background)',
+        }}
         onMouseDown={handleSVGMouseDown}
         onMouseMove={handleSVGMouseMove}
         onMouseUp={handleSVGMouseUp}
@@ -208,7 +211,7 @@ function Canvas() {
             <path
               d={`M ${GRID_SIZE} 0 L 0 0 0 ${GRID_SIZE}`}
               fill="none"
-              stroke="#e5e7eb"
+              stroke="var(--canvas-grid)"
               strokeWidth="1"
             />
           </pattern>
@@ -363,9 +366,9 @@ function Canvas() {
             y={rectTool.previewRect.y}
             width={rectTool.previewRect.width}
             height={rectTool.previewRect.height}
-            fill="#93c5fd"
+            fill="var(--canvas-preview-fill)"
             fillOpacity={0.4}
-            stroke="#2563eb"
+            stroke="var(--canvas-preview-stroke)"
             strokeWidth="1.5"
             strokeDasharray="5 5"
             pointerEvents="none"
@@ -378,9 +381,9 @@ function Canvas() {
             cy={ellipseTool.previewEllipse.y + ellipseTool.previewEllipse.height / 2}
             rx={ellipseTool.previewEllipse.width / 2}
             ry={ellipseTool.previewEllipse.height / 2}
-            fill="#93c5fd"
+            fill="var(--canvas-preview-fill)"
             fillOpacity={0.4}
-            stroke="#2563eb"
+            stroke="var(--canvas-preview-stroke)"
             strokeWidth="1.5"
             strokeDasharray="5 5"
             pointerEvents="none"
@@ -393,7 +396,7 @@ function Canvas() {
             y1={lineTool.previewLine.y1}
             x2={lineTool.previewLine.x2}
             y2={lineTool.previewLine.y2}
-            stroke="#2563eb"
+            stroke="var(--canvas-preview-stroke)"
             strokeWidth="1.5"
             strokeDasharray="5 5"
             pointerEvents="none"
@@ -405,7 +408,7 @@ function Canvas() {
             <polyline
               points={polylineTool.points.map((point) => `${point.x},${point.y}`).join(' ')}
               fill="none"
-              stroke="#2563eb"
+              stroke="var(--canvas-preview-stroke)"
               strokeWidth="1.5"
               strokeDasharray="5 5"
               pointerEvents="none"
@@ -416,7 +419,7 @@ function Canvas() {
                 y1={polylineTool.points[polylineTool.points.length - 1].y}
                 x2={polylineTool.previewPoint.x}
                 y2={polylineTool.previewPoint.y}
-                stroke="#2563eb"
+                stroke="var(--canvas-preview-stroke)"
                 strokeWidth="1.5"
                 strokeDasharray="5 5"
                 pointerEvents="none"
@@ -428,10 +431,10 @@ function Canvas() {
       </svg>
 
       {/* ── Status readouts ───────────────────────────────────────────── */}
-      <div className="absolute bottom-3 left-3 bg-white px-3 py-1 rounded shadow text-xs text-gray-600 font-mono">
+      <div className="absolute bottom-3 left-3 rounded border border-slate-200 bg-white px-3 py-1 font-mono text-xs text-slate-600 shadow-sm dark:border-slate-300 dark:bg-slate-100 dark:text-slate-700">
         {mousePosition.x}, {mousePosition.y}
       </div>
-      <div className="absolute bottom-3 right-3 bg-white px-3 py-1 rounded shadow text-xs text-gray-600 font-mono">
+      <div className="absolute bottom-3 right-3 rounded border border-slate-200 bg-white px-3 py-1 font-mono text-xs text-slate-600 shadow-sm dark:border-slate-300 dark:bg-slate-100 dark:text-slate-700">
         Tool: {activeTool}
       </div>
 
