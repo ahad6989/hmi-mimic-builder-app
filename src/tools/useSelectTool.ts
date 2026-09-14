@@ -67,6 +67,8 @@ interface DragState {
    * If still false at mouseup → it was a click, not a drag → select the element.
    */
   hasMoved: boolean
+
+  historyKey: string
 }
 
 // ---------------------------------------------------------------------------
@@ -145,6 +147,7 @@ export function useSelectTool(
         elementStartX: el.transform.x,
         elementStartY: el.transform.y,
         hasMoved:      false,
+        historyKey:    crypto.randomUUID(),
       }
     },
     [toWorld]
@@ -177,7 +180,7 @@ export function useSelectTool(
       const newX = drag.elementStartX + deltaX
       const newY = drag.elementStartY + deltaY
 
-      updateElementPosition(drag.elementId, newX, newY)
+      updateElementPosition(drag.elementId, newX, newY, drag.historyKey)
     },
     [toWorld, updateElementPosition]
   )

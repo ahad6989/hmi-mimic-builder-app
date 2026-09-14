@@ -4,9 +4,12 @@ import {
   History,
   Moon,
   Pencil,
+  Redo2,
   Sun,
+  Undo2,
   ZoomIn,
 } from 'lucide-react'
+import { useEditorStore } from '../store/EditorStore'
 
 interface TopBarProps {
   isDarkMode: boolean
@@ -14,6 +17,11 @@ interface TopBarProps {
 }
 
 function TopBar({ isDarkMode, onToggleTheme }: TopBarProps) {
+  const undo = useEditorStore((state) => state.undo)
+  const redo = useEditorStore((state) => state.redo)
+  const canUndo = useEditorStore((state) => state.past.length > 0)
+  const canRedo = useEditorStore((state) => state.future.length > 0)
+
   return (
     <header className="h-14 shrink-0 border-b border-slate-200 bg-white px-5 flex items-center shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
       <div className="flex items-center gap-3">
@@ -51,6 +59,28 @@ function TopBar({ isDarkMode, onToggleTheme }: TopBarProps) {
           <History size={14} aria-hidden="true" />
           History
         </button>
+        <div className="ml-3 flex items-center gap-0.5 border-l border-slate-200 pl-3 dark:border-slate-700">
+          <button
+            type="button"
+            title="Undo (Ctrl+Z)"
+            aria-label="Undo (Ctrl+Z)"
+            onClick={undo}
+            disabled={!canUndo}
+            className="flex h-8 w-8 items-center justify-center rounded text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-30 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+          >
+            <Undo2 size={15} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            title="Redo (Ctrl+Y / Ctrl+Shift+Z)"
+            aria-label="Redo (Ctrl+Y or Ctrl+Shift+Z)"
+            onClick={redo}
+            disabled={!canRedo}
+            className="flex h-8 w-8 items-center justify-center rounded text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-30 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+          >
+            <Redo2 size={15} aria-hidden="true" />
+          </button>
+        </div>
         <button
           type="button"
           title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}

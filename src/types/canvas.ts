@@ -65,6 +65,15 @@ export interface TransformAttributes {
   rotation: number  // degrees, clockwise, 0 = upright
 }
 
+export interface PathPoint {
+  x: number
+  y: number
+  handleOut?: {
+    x: number
+    y: number
+  }
+}
+
 // ---------------------------------------------------------------------------
 // CanvasElement
 //
@@ -95,7 +104,7 @@ export interface CanvasElement {
   y1?: number             // First endpoint y-coordinate (line only)
   x2?: number             // Second endpoint x-coordinate (line only)
   y2?: number             // Second endpoint y-coordinate (line only)
-  points?: Array<{ x: number; y: number }>  // Polyline / line endpoints
+  points?: PathPoint[]  // Polyline / path anchor points
   pathData?: string       // SVG path 'd' attribute  (path / pencil only)
   textContent?: string    // Text element content    (text only)
 }
@@ -227,5 +236,57 @@ export function createPolylineElement(
       fill: 'none',
     },
     points: copiedPoints,
+  }
+}
+
+/** Create a ready-to-store open path from an ordered anchor point list. */
+export function buildPathData(points: PathPoint[]): string {
+  return points
+    .map((point, index) => {
+      if (index === 0) return `M ${point.x} ${point.y}`
+
+      const previousPoint = points[index - 1]
+      if (!previousPoint.handleOut) return `L ${point.x} ${point.y}`
+
+      return `C ${previousPoint.handleOut.x} ${previousPoint.handleOut.y} ${point.x} ${point.y} ${point.x} ${point.y}`
+    })
+    .join(' ')
+}
+
+export function createPathElement(
+  points: PathPoint[]
+): CanvasElement {
+  const copiedPoints = points.map((point) => ({
+    x: point.x,
+    y: point.y,
+    ...(point.handleOut ? { handleOut: { ...point.handleOut } } : {}),
+  }))
+  const xValues = copiedPoints.map((point) => point.x)
+  const yValues = copiedPoints.map((point) => point.y)
+  const x = xValues.length > 0 ? Math.min(...xValues) : 0
+  const y = yValues.length > 0 ? Math.min(...yValues) : 0
+  const maxX = xValues.length > 0 ? Math.max(...xValues) : 0
+  const maxY = yValues.length > 0 ? Math.max(...yValues) : 0
+  const pathData = buildPathData(copiedPoints)
+
+  return {
+    id: crypto.randomUUID(),
+    name: 'Path',
+    type: 'path',
+    visible: true,
+    locked: false,
+    transform: {
+      x,
+      y,
+      width: maxX - x,
+      height: maxY - y,
+      rotation: 0,
+    },
+    style: {
+      ...DEFAULT_STYLE,
+      fill: 'none',
+    },
+    points: copiedPoints,
+    pathData,
   }
 }
