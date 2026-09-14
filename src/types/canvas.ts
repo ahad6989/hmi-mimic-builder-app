@@ -45,6 +45,7 @@ export interface StyleAttributes {
   stroke: string
   strokeWidth: number           // pixels
   strokeOpacity: number         // 0.0 – 1.0
+  opacity: number               // 0.0 – 1.0
   strokeDashArray: string       // e.g. '' (solid), '6 4' (dashed), '2 4' (dotted)
   strokeLineCap: 'butt' | 'round' | 'square'
   strokeLineJoin: 'miter' | 'round' | 'bevel'
@@ -123,6 +124,7 @@ export const DEFAULT_STYLE: StyleAttributes = {
   stroke: 'var(--canvas-default-stroke)',
   strokeWidth: 2,
   strokeOpacity: 1,
+  opacity: 1,
   strokeDashArray: '',
   strokeLineCap: 'butt',
   strokeLineJoin: 'miter',

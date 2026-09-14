@@ -82,6 +82,8 @@ interface EditorState {
   setActiveTool: (tool: Tool) => void
 
   addElement: (element: CanvasElement) => void
+  updateElement: (id: string, changes: Partial<CanvasElement>, historyKey?: string) => void
+  deleteElement: (id: string) => void
 
   /**
    * Move a single element to a new (x, y) position.
@@ -170,6 +172,32 @@ export const useEditorStore = create<EditorState>((set) => {
       const history = pushHistory(state)
       return {
         elements: [...state.elements, element],
+        ...history,
+      }
+    }),
+
+  updateElement: (id, changes, historyKey) =>
+    set((state) => {
+      const element = state.elements.find((item) => item.id === id)
+      if (!element) return state
+
+      const history = pushHistory(state, historyKey)
+      return {
+        elements: state.elements.map((item) =>
+          item.id === id ? { ...item, ...changes } : item
+        ),
+        ...history,
+      }
+    }),
+
+  deleteElement: (id) =>
+    set((state) => {
+      if (!state.elements.some((element) => element.id === id)) return state
+
+      const history = pushHistory(state)
+      return {
+        elements: state.elements.filter((element) => element.id !== id),
+        selectedElementIds: state.selectedElementIds.filter((selectedId) => selectedId !== id),
         ...history,
       }
     }),

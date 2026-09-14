@@ -110,6 +110,8 @@ function Canvas() {
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds)
   const setActiveTool      = useEditorStore((s) => s.setActiveTool)
   const clearSelection     = useEditorStore((s) => s.clearSelection)
+  const selectElement       = useEditorStore((s) => s.selectElement)
+  const deleteElement       = useEditorStore((s) => s.deleteElement)
   const undo               = useEditorStore((s) => s.undo)
   const redo               = useEditorStore((s) => s.redo)
 
@@ -117,6 +119,8 @@ function Canvas() {
   // A ref to the <svg> DOM element. We pass this to tool hooks so they can
   // convert screen coordinates to SVG coordinates without needing a React event.
   const svgRef = useRef<SVGSVGElement>(null)
+  const canvasRef = useRef<HTMLElement>(null)
+  const contextMenuRef = useRef<HTMLDivElement>(null)
 
   // ---- Tool hooks ----
   // Each tool hook owns its own internal state and returns event handlers.
@@ -130,6 +134,7 @@ function Canvas() {
   const resizeTool = useResizeTool(svgRef)
 
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
+  const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null)
   const selectedElement = selectedElementIds.length === 1
     ? elements.find((element) => element.id === selectedElementIds[0])
     : undefined
@@ -153,6 +158,10 @@ function Canvas() {
       }
       switch (e.key) {
         case 'Escape':
+          if (contextMenu) {
+            setContextMenu(null)
+            break
+          }
           if (activeTool === 'polyline' && polylineTool.isDrawing) {
             polylineTool.cancel()
           } else if (activeTool === 'pen' && penTool.isDrawing) {
@@ -165,6 +174,12 @@ function Canvas() {
           if (activeTool === 'polyline') polylineTool.commit()
           if (activeTool === 'pen') penTool.commit()
           break
+        case 'Delete':
+          if (selectedElementIds.length > 0) {
+            selectedElementIds.forEach((id) => deleteElement(id))
+            clearSelection()
+          }
+          break
         case 'v': case 'V': setActiveTool('select'); break
         case 'r': case 'R': setActiveTool('rect');   break
         case 'y': case 'Y': setActiveTool('polyline'); break
@@ -172,7 +187,20 @@ function Canvas() {
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [activeTool, clearSelection, penTool, polylineTool, redo, setActiveTool, undo])
+  }, [activeTool, clearSelection, contextMenu, deleteElement, penTool, polylineTool, redo, selectedElementIds, setActiveTool, undo])
+
+  useEffect(() => {
+    if (!contextMenu) return
+
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!contextMenuRef.current?.contains(event.target as Node)) {
+        setContextMenu(null)
+      }
+    }
+
+    document.addEventListener('pointerdown', closeOnOutsidePointer)
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer)
+  }, [contextMenu])
 
   // ---- Coordinate conversion (Canvas-level, used for the mouse readout) ----
   const toSVGPoint = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -239,9 +267,24 @@ function Canvas() {
     if (activeTool === 'pen') penTool.onDoubleClick()
   }
 
+  const handleShapeContextMenu = (event: React.MouseEvent<SVGElement>, id: string) => {
+    event.preventDefault()
+    event.stopPropagation()
+    selectElement(id)
+
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const bounds = canvas.getBoundingClientRect()
+    setContextMenu({
+      id,
+      x: event.clientX - bounds.left,
+      y: event.clientY - bounds.top,
+    })
+  }
+
   // ---- Render ----
   return (
-    <main className="relative flex-1 overflow-hidden bg-slate-200 transition-colors dark:bg-slate-950">
+    <main ref={canvasRef} className="relative flex-1 overflow-hidden bg-slate-200 transition-colors dark:bg-slate-950">
 
       <svg
         ref={svgRef}
@@ -292,6 +335,7 @@ function Canvas() {
                   fillOpacity={el.style.fillOpacity}
                   stroke={el.style.stroke}
                   strokeWidth={el.style.strokeWidth}
+                  opacity={el.style.opacity ?? 1}
                   rx={el.rx}
                   style={{
                     cursor: activeTool === 'select' ? 'move' : 'crosshair',
@@ -305,6 +349,7 @@ function Canvas() {
                   // Prevent SVG onClick (clearSelection) from firing
                   // after we've just selected or dragged a shape
                   onClick={(e) => e.stopPropagation()}
+                  onContextMenu={(e) => handleShapeContextMenu(e, el.id)}
                 />
               )
             }
@@ -320,6 +365,7 @@ function Canvas() {
                   fillOpacity={el.style.fillOpacity}
                   stroke={el.style.stroke}
                   strokeWidth={el.style.strokeWidth}
+                  opacity={el.style.opacity ?? 1}
                   style={{
                     cursor: activeTool === 'select' ? 'move' : 'crosshair',
                   }}
@@ -329,6 +375,7 @@ function Canvas() {
                     }
                   }}
                   onClick={(e) => e.stopPropagation()}
+                  onContextMenu={(e) => handleShapeContextMenu(e, el.id)}
                 />
               )
             }
@@ -343,6 +390,7 @@ function Canvas() {
                   fill="none"
                   stroke={el.style.stroke}
                   strokeWidth={el.style.strokeWidth}
+                  opacity={el.style.opacity ?? 1}
                   strokeOpacity={el.style.strokeOpacity}
                   strokeDasharray={el.style.strokeDashArray}
                   strokeLinecap={el.style.strokeLineCap}
@@ -356,6 +404,7 @@ function Canvas() {
                     }
                   }}
                   onClick={(e) => e.stopPropagation()}
+                  onContextMenu={(e) => handleShapeContextMenu(e, el.id)}
                 />
               )
             }
@@ -368,6 +417,7 @@ function Canvas() {
                   fillOpacity={el.style.fillOpacity}
                   stroke={el.style.stroke}
                   strokeWidth={el.style.strokeWidth}
+                  opacity={el.style.opacity ?? 1}
                   strokeOpacity={el.style.strokeOpacity}
                   strokeDasharray={el.style.strokeDashArray}
                   strokeLinecap={el.style.strokeLineCap}
@@ -381,6 +431,7 @@ function Canvas() {
                     }
                   }}
                   onClick={(e) => e.stopPropagation()}
+                  onContextMenu={(e) => handleShapeContextMenu(e, el.id)}
                 />
               )
             }
@@ -393,6 +444,7 @@ function Canvas() {
                   fillOpacity={el.style.fillOpacity}
                   stroke={el.style.stroke}
                   strokeWidth={el.style.strokeWidth}
+                  opacity={el.style.opacity ?? 1}
                   strokeOpacity={el.style.strokeOpacity}
                   strokeDasharray={el.style.strokeDashArray}
                   strokeLinecap={el.style.strokeLineCap}
@@ -406,6 +458,7 @@ function Canvas() {
                     }
                   }}
                   onClick={(e) => e.stopPropagation()}
+                  onContextMenu={(e) => handleShapeContextMenu(e, el.id)}
                 />
               )
             }
@@ -560,6 +613,26 @@ function Canvas() {
         )}
 
       </svg>
+
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="absolute z-20 min-w-28 rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="w-full rounded px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-red-50 hover:text-red-600 dark:text-slate-200 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+            onClick={() => {
+              deleteElement(contextMenu.id)
+              setContextMenu(null)
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      )}
 
       {/* ── Status readouts ───────────────────────────────────────────── */}
       <div className="absolute bottom-3 left-3 rounded border border-slate-200 bg-white px-3 py-1 font-mono text-xs text-slate-600 shadow-sm dark:border-slate-300 dark:bg-slate-100 dark:text-slate-700">
