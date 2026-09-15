@@ -24,7 +24,6 @@
 
 import { useRef, useState, useEffect } from 'react'
 import { useEditorStore } from '../store/EditorStore'
-import type { PathPoint } from '../types/canvas'
 import { getElementBounds } from '../geometry/bounds'
 import { useSelectTool } from '../tools/useSelectTool'
 import { useRectTool } from '../tools/useRectTool'
@@ -32,7 +31,13 @@ import { useEllipseTool } from '../tools/useEllipseTool'
 import { useLineTool } from '../tools/useLineTool'
 import { usePolylineTool } from '../tools/usePolylineTool'
 import { usePenTool } from '../tools/usePenTool'
-import { useResizeTool, type ResizeHandle } from '../tools/useResizeTool'
+import { useResizeTool } from '../tools/useResizeTool'
+import ShapeRenderer from './ShapeRenderer'
+import SelectionOverlay from './SelectionOverlay'
+import ResizeHandles from './ResizeHandles'
+import DrawPreview from './DrawPreview'
+import ShapeContextMenu from './ShapeContextMenu'
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -43,26 +48,6 @@ const CANVAS_HEIGHT = 600
 const GRID_SIZE     = 20
 
 /** Selection outline padding around element bounding box (SVG units). */
-const SELECTION_PADDING = 4
-const RESIZE_HANDLE_SIZE = 8
-
-const RESIZE_HANDLES: Array<{
-  handle: ResizeHandle
-  x: number
-  y: number
-  cursor: string
-}> = [
-  { handle: 'top-left', x: 0, y: 0, cursor: 'nwse-resize' },
-  { handle: 'top', x: 0.5, y: 0, cursor: 'ns-resize' },
-  { handle: 'top-right', x: 1, y: 0, cursor: 'nesw-resize' },
-  { handle: 'right', x: 1, y: 0.5, cursor: 'ew-resize' },
-  { handle: 'bottom-right', x: 1, y: 1, cursor: 'nwse-resize' },
-  { handle: 'bottom', x: 0.5, y: 1, cursor: 'ns-resize' },
-  { handle: 'bottom-left', x: 0, y: 1, cursor: 'nesw-resize' },
-  { handle: 'left', x: 0, y: 0.5, cursor: 'ew-resize' },
-]
-
-/** Cursor to show for each tool. */
 const TOOL_CURSORS: Record<string, string> = {
   select:  'default',
   rect:    'crosshair',
@@ -70,33 +55,6 @@ const TOOL_CURSORS: Record<string, string> = {
   line:    'crosshair',
   polyline: 'crosshair',
   pen:     'crosshair',
-}
-
-function buildPenPreviewPath(
-  points: PathPoint[],
-  previewPoint: PathPoint | null,
-  activeHandleIndex: number | null,
-  activeHandlePoint: PathPoint | null
-) {
-  if (points.length === 0) return ''
-
-  const previewPoints = previewPoint ? [...points, previewPoint] : points
-  return previewPoints
-    .map((point, index) => {
-      if (index === 0) return `M ${point.x} ${point.y}`
-
-      const previousPoint = previewPoints[index - 1]
-      const isActiveIncomingPreview = index === activeHandleIndex && activeHandlePoint
-      const incomingControl = isActiveIncomingPreview ? activeHandlePoint : point
-
-      if (!previousPoint.handleOut && !isActiveIncomingPreview) {
-        return `L ${point.x} ${point.y}`
-      }
-
-      const outgoingControl = previousPoint.handleOut ?? previousPoint
-      return `C ${outgoingControl.x} ${outgoingControl.y} ${incomingControl.x} ${incomingControl.y} ${point.x} ${point.y}`
-    })
-    .join(' ')
 }
 
 // ---------------------------------------------------------------------------
@@ -144,54 +102,19 @@ function Canvas() {
     : undefined
   const selectedBounds = selectedElement ? getElementBounds(selectedElement) : null
 
-  // ---- Keyboard shortcuts ----
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
-      const isShortcut = e.ctrlKey || e.metaKey
-      if (isShortcut && (e.key === 'z' || e.key === 'Z')) {
-        e.preventDefault()
-        if (e.shiftKey) redo()
-        else undo()
-        return
-      }
-      if (isShortcut && (e.key === 'y' || e.key === 'Y')) {
-        e.preventDefault()
-        redo()
-        return
-      }
-      switch (e.key) {
-        case 'Escape':
-          if (contextMenu) {
-            setContextMenu(null)
-            break
-          }
-          if (activeTool === 'polyline' && polylineTool.isDrawing) {
-            polylineTool.cancel()
-          } else if (activeTool === 'pen' && penTool.isDrawing) {
-            penTool.cancel()
-          } else {
-            clearSelection()
-          }
-          break
-        case 'Enter':
-          if (activeTool === 'polyline') polylineTool.commit()
-          if (activeTool === 'pen') penTool.commit()
-          break
-        case 'Delete':
-          if (selectedElementIds.length > 0) {
-            selectedElementIds.forEach((id) => deleteElement(id))
-            clearSelection()
-          }
-          break
-        case 'v': case 'V': setActiveTool('select'); break
-        case 'r': case 'R': setActiveTool('rect');   break
-        case 'y': case 'Y': setActiveTool('polyline'); break
-      }
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [activeTool, clearSelection, contextMenu, deleteElement, penTool, polylineTool, redo, selectedElementIds, setActiveTool, undo])
+  useKeyboardShortcuts({
+    activeTool,
+    contextMenuOpen: contextMenu !== null,
+    selectedElementIds,
+    polylineTool,
+    penTool,
+    setActiveTool,
+    clearSelection,
+    deleteElement,
+    setContextMenu,
+    undo,
+    redo,
+  })
 
   useEffect(() => {
     if (!contextMenu) return
@@ -244,7 +167,7 @@ function Canvas() {
     }
   }
 
-  const handleSVGMouseUp = (_e: React.MouseEvent<SVGSVGElement>) => {
+  const handleSVGMouseUp = () => {
     if (activeTool === 'rect') rectTool.onMouseUp()
     if (activeTool === 'ellipse') ellipseTool.onMouseUp()
     if (activeTool === 'line') lineTool.onMouseUp()
@@ -326,148 +249,15 @@ function Canvas() {
           so it always appears on top regardless of shape count or z-order.
         */}
         <g id="artwork-layer">
-          {elements.map((el) => {
-            if (el.type === 'rect') {
-              return (
-                <rect
-                  key={el.id}
-                  x={el.transform.x}
-                  y={el.transform.y}
-                  width={el.transform.width}
-                  height={el.transform.height}
-                  fill={el.style.fill}
-                  fillOpacity={el.style.fillOpacity}
-                  stroke={el.style.stroke}
-                  strokeWidth={el.style.strokeWidth}
-                  opacity={el.style.opacity ?? 1}
-                  rx={el.rx}
-                  style={{
-                    cursor: activeTool === 'select' ? 'move' : 'crosshair',
-                  }}
-                  // Route element-level events to the active tool
-                  onMouseDown={(e) => {
-                    if (activeTool === 'select') {
-                      selectTool.onElementMouseDown(e, el.id)
-                    }
-                  }}
-                  // Prevent SVG onClick (clearSelection) from firing
-                  // after we've just selected or dragged a shape
-                  onClick={(e) => e.stopPropagation()}
-                  onContextMenu={(e) => handleShapeContextMenu(e, el.id)}
-                />
-              )
-            }
-            if (el.type === 'ellipse') {
-              return (
-                <ellipse
-                  key={el.id}
-                  cx={el.transform.x + el.transform.width / 2}
-                  cy={el.transform.y + el.transform.height / 2}
-                  rx={el.transform.width / 2}
-                  ry={el.transform.height / 2}
-                  fill={el.style.fill}
-                  fillOpacity={el.style.fillOpacity}
-                  stroke={el.style.stroke}
-                  strokeWidth={el.style.strokeWidth}
-                  opacity={el.style.opacity ?? 1}
-                  style={{
-                    cursor: activeTool === 'select' ? 'move' : 'crosshair',
-                  }}
-                  onMouseDown={(e) => {
-                    if (activeTool === 'select') {
-                      selectTool.onElementMouseDown(e, el.id)
-                    }
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  onContextMenu={(e) => handleShapeContextMenu(e, el.id)}
-                />
-              )
-            }
-            if (el.type === 'line') {
-              return (
-                <line
-                  key={el.id}
-                  x1={el.x1}
-                  y1={el.y1}
-                  x2={el.x2}
-                  y2={el.y2}
-                  fill="none"
-                  stroke={el.style.stroke}
-                  strokeWidth={el.style.strokeWidth}
-                  opacity={el.style.opacity ?? 1}
-                  strokeOpacity={el.style.strokeOpacity}
-                  strokeDasharray={el.style.strokeDashArray}
-                  strokeLinecap={el.style.strokeLineCap}
-                  strokeLinejoin={el.style.strokeLineJoin}
-                  style={{
-                    cursor: activeTool === 'select' ? 'move' : 'crosshair',
-                  }}
-                  onMouseDown={(e) => {
-                    if (activeTool === 'select') {
-                      selectTool.onElementMouseDown(e, el.id)
-                    }
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  onContextMenu={(e) => handleShapeContextMenu(e, el.id)}
-                />
-              )
-            }
-            if (el.type === 'path' && el.pathData) {
-              return (
-                <path
-                  key={el.id}
-                  d={el.pathData}
-                  fill={el.style.fill}
-                  fillOpacity={el.style.fillOpacity}
-                  stroke={el.style.stroke}
-                  strokeWidth={el.style.strokeWidth}
-                  opacity={el.style.opacity ?? 1}
-                  strokeOpacity={el.style.strokeOpacity}
-                  strokeDasharray={el.style.strokeDashArray}
-                  strokeLinecap={el.style.strokeLineCap}
-                  strokeLinejoin={el.style.strokeLineJoin}
-                  style={{
-                    cursor: activeTool === 'select' ? 'move' : 'crosshair',
-                  }}
-                  onMouseDown={(e) => {
-                    if (activeTool === 'select') {
-                      selectTool.onElementMouseDown(e, el.id)
-                    }
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  onContextMenu={(e) => handleShapeContextMenu(e, el.id)}
-                />
-              )
-            }
-            if (el.type === 'polyline' && el.points) {
-              return (
-                <polyline
-                  key={el.id}
-                  points={el.points.map((point) => `${point.x},${point.y}`).join(' ')}
-                  fill={el.style.fill}
-                  fillOpacity={el.style.fillOpacity}
-                  stroke={el.style.stroke}
-                  strokeWidth={el.style.strokeWidth}
-                  opacity={el.style.opacity ?? 1}
-                  strokeOpacity={el.style.strokeOpacity}
-                  strokeDasharray={el.style.strokeDashArray}
-                  strokeLinecap={el.style.strokeLineCap}
-                  strokeLinejoin={el.style.strokeLineJoin}
-                  style={{
-                    cursor: activeTool === 'select' ? 'move' : 'crosshair',
-                  }}
-                  onMouseDown={(e) => {
-                    if (activeTool === 'select') {
-                      selectTool.onElementMouseDown(e, el.id)
-                    }
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  onContextMenu={(e) => handleShapeContextMenu(e, el.id)}
-                />
-              )
-            }
-            return null
-          })}
+          {elements.map((element) => (
+            <ShapeRenderer
+              key={element.id}
+              element={element}
+              activeTool={activeTool}
+              onElementMouseDown={selectTool.onElementMouseDown}
+              onContextMenu={handleShapeContextMenu}
+            />
+          ))}
         </g>
 
         {/* ── Selection overlay ─────────────────────────────────────────── */}
@@ -475,207 +265,34 @@ function Canvas() {
           Rendered AFTER the artwork layer so outlines always sit on top.
           pointerEvents="none" means mouse events pass through to shapes below.
         */}
-        <g id="selection-overlay" pointerEvents="none">
-          {elements
-            .filter((el) => selectedElementIds.includes(el.id))
-            .map((el) => {
-              const bounds = getElementBounds(el)
-              return (
-                <rect
-                  key={el.id}
-                  x={bounds.x - SELECTION_PADDING}
-                  y={bounds.y - SELECTION_PADDING}
-                  width={bounds.width + SELECTION_PADDING * 2}
-                  height={bounds.height + SELECTION_PADDING * 2}
-                  fill="none"
-                  stroke="#2563eb"
-                  strokeWidth="1.5"
-                  strokeDasharray="6 4"
-                />
-              )
-            })}
-        </g>
+        <SelectionOverlay elements={elements} selectedElementIds={selectedElementIds} />
 
-        {activeTool === 'select' && selectedElement && selectedBounds && (
-          <g id="resize-handles" pointerEvents="all">
-            {RESIZE_HANDLES.map(({ handle, x, y, cursor }) => (
-              <rect
-                key={handle}
-                x={selectedBounds.x + selectedBounds.width * x - RESIZE_HANDLE_SIZE / 2}
-                y={selectedBounds.y + selectedBounds.height * y - RESIZE_HANDLE_SIZE / 2}
-                width={RESIZE_HANDLE_SIZE}
-                height={RESIZE_HANDLE_SIZE}
-                fill="var(--canvas-background)"
-                stroke="#2563eb"
-                strokeWidth="1.5"
-                pointerEvents="all"
-                style={{ cursor }}
-                onMouseDown={(e) => resizeTool.onHandleMouseDown(e, selectedElement.id, handle)}
-                onClick={(e) => e.stopPropagation()}
-              />
-            ))}
-          </g>
+        {activeTool === 'select' && (
+          <ResizeHandles element={selectedElement} bounds={selectedBounds} resizeTool={resizeTool} />
         )}
 
         {/* ── Draw previews ─────────────────────────────────────────────── */}
-        {rectTool.previewRect && (
-          <rect
-            x={rectTool.previewRect.x}
-            y={rectTool.previewRect.y}
-            width={rectTool.previewRect.width}
-            height={rectTool.previewRect.height}
-            fill="var(--canvas-preview-fill)"
-            fillOpacity={0.4}
-            stroke="var(--canvas-preview-stroke)"
-            strokeWidth="1.5"
-            strokeDasharray="5 5"
-            pointerEvents="none"
-          />
-        )}
-
-        {ellipseTool.previewEllipse && (
-          <ellipse
-            cx={ellipseTool.previewEllipse.x + ellipseTool.previewEllipse.width / 2}
-            cy={ellipseTool.previewEllipse.y + ellipseTool.previewEllipse.height / 2}
-            rx={ellipseTool.previewEllipse.width / 2}
-            ry={ellipseTool.previewEllipse.height / 2}
-            fill="var(--canvas-preview-fill)"
-            fillOpacity={0.4}
-            stroke="var(--canvas-preview-stroke)"
-            strokeWidth="1.5"
-            strokeDasharray="5 5"
-            pointerEvents="none"
-          />
-        )}
-
-        {lineTool.previewLine && (
-          <line
-            x1={lineTool.previewLine.x1}
-            y1={lineTool.previewLine.y1}
-            x2={lineTool.previewLine.x2}
-            y2={lineTool.previewLine.y2}
-            stroke="var(--canvas-preview-stroke)"
-            strokeWidth="1.5"
-            strokeDasharray="5 5"
-            pointerEvents="none"
-          />
-        )}
-
-        {polylineTool.isDrawing && polylineTool.points.length > 0 && (
-          <>
-            <polyline
-              points={polylineTool.points.map((point) => `${point.x},${point.y}`).join(' ')}
-              fill="none"
-              stroke="var(--canvas-preview-stroke)"
-              strokeWidth="1.5"
-              strokeDasharray="5 5"
-              pointerEvents="none"
-            />
-            {polylineTool.previewPoint && (
-              <line
-                x1={polylineTool.points[polylineTool.points.length - 1].x}
-                y1={polylineTool.points[polylineTool.points.length - 1].y}
-                x2={polylineTool.previewPoint.x}
-                y2={polylineTool.previewPoint.y}
-                stroke="var(--canvas-preview-stroke)"
-                strokeWidth="1.5"
-                strokeDasharray="5 5"
-                pointerEvents="none"
-              />
-            )}
-          </>
-        )}
-
-        {penTool.isDrawing && penTool.points.length > 0 && (
-          <>
-            <path
-              d={buildPenPreviewPath(
-                penTool.points,
-                penTool.previewPoint,
-                null,
-                null
-              )}
-              fill="none"
-              stroke="var(--canvas-preview-stroke)"
-              strokeWidth="1.5"
-              strokeDasharray="5 5"
-              pointerEvents="none"
-            />
-            {penTool.previewPoint && (
-              <line
-                x1={penTool.points[penTool.points.length - 1].x}
-                y1={penTool.points[penTool.points.length - 1].y}
-                x2={penTool.previewPoint.x}
-                y2={penTool.previewPoint.y}
-                stroke="var(--canvas-preview-stroke)"
-                strokeWidth="1.5"
-                strokeDasharray="5 5"
-                pointerEvents="none"
-              />
-            )}
-          </>
-        )}
+        <DrawPreview
+          rectTool={rectTool}
+          ellipseTool={ellipseTool}
+          lineTool={lineTool}
+          polylineTool={polylineTool}
+          penTool={penTool}
+        />
 
       </svg>
 
       {contextMenu && (
-        <div
-          ref={contextMenuRef}
-          className="absolute z-20 min-w-28 rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <button
-            type="button"
-            className="w-full rounded px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-            onClick={() => {
-              bringToFront(contextMenu.id)
-              setContextMenu(null)
-            }}
-          >
-            Bring to Front
-          </button>
-          <button
-            type="button"
-            className="w-full rounded px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-            onClick={() => {
-              sendToBack(contextMenu.id)
-              setContextMenu(null)
-            }}
-          >
-            Send to Back
-          </button>
-          <button
-            type="button"
-            className="w-full rounded px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-            onClick={() => {
-              bringForward(contextMenu.id)
-              setContextMenu(null)
-            }}
-          >
-            Bring Forward
-          </button>
-          <button
-            type="button"
-            className="w-full rounded px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-            onClick={() => {
-              sendBackward(contextMenu.id)
-              setContextMenu(null)
-            }}
-          >
-            Send Backward
-          </button>
-          <button
-            type="button"
-            className="w-full rounded px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-red-50 hover:text-red-600 dark:text-slate-200 dark:hover:bg-red-950/40 dark:hover:text-red-400"
-            onClick={() => {
-              deleteElement(contextMenu.id)
-              setContextMenu(null)
-            }}
-          >
-            Delete
-          </button>
-        </div>
+        <ShapeContextMenu
+          contextMenu={contextMenu}
+          contextMenuRef={contextMenuRef}
+          onClose={() => setContextMenu(null)}
+          bringToFront={bringToFront}
+          sendToBack={sendToBack}
+          bringForward={bringForward}
+          sendBackward={sendBackward}
+          deleteElement={deleteElement}
+        />
       )}
 
       {/* ── Status readouts ───────────────────────────────────────────── */}
