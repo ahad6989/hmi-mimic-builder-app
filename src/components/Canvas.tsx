@@ -112,6 +112,10 @@ function Canvas() {
   const clearSelection     = useEditorStore((s) => s.clearSelection)
   const selectElement       = useEditorStore((s) => s.selectElement)
   const deleteElement       = useEditorStore((s) => s.deleteElement)
+  const bringToFront       = useEditorStore((s) => s.bringToFront)
+  const sendToBack         = useEditorStore((s) => s.sendToBack)
+  const bringForward       = useEditorStore((s) => s.bringForward)
+  const sendBackward       = useEditorStore((s) => s.sendBackward)
   const undo               = useEditorStore((s) => s.undo)
   const redo               = useEditorStore((s) => s.redo)
 
@@ -621,6 +625,46 @@ function Canvas() {
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onPointerDown={(event) => event.stopPropagation()}
         >
+          <button
+            type="button"
+            className="w-full rounded px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+            onClick={() => {
+              bringToFront(contextMenu.id)
+              setContextMenu(null)
+            }}
+          >
+            Bring to Front
+          </button>
+          <button
+            type="button"
+            className="w-full rounded px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+            onClick={() => {
+              sendToBack(contextMenu.id)
+              setContextMenu(null)
+            }}
+          >
+            Send to Back
+          </button>
+          <button
+            type="button"
+            className="w-full rounded px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+            onClick={() => {
+              bringForward(contextMenu.id)
+              setContextMenu(null)
+            }}
+          >
+            Bring Forward
+          </button>
+          <button
+            type="button"
+            className="w-full rounded px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+            onClick={() => {
+              sendBackward(contextMenu.id)
+              setContextMenu(null)
+            }}
+          >
+            Send Backward
+          </button>
           <button
             type="button"
             className="w-full rounded px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-red-50 hover:text-red-600 dark:text-slate-200 dark:hover:bg-red-950/40 dark:hover:text-red-400"

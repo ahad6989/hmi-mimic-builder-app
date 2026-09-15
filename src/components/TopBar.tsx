@@ -1,5 +1,4 @@
 import {
-  Download,
   FileText,
   History,
   Moon,
@@ -9,7 +8,9 @@ import {
   Undo2,
   ZoomIn,
 } from 'lucide-react'
+import { useState } from 'react'
 import { useEditorStore } from '../store/EditorStore'
+import ExportPanel from './ExportPanel'
 
 interface TopBarProps {
   isDarkMode: boolean
@@ -21,6 +22,7 @@ function TopBar({ isDarkMode, onToggleTheme }: TopBarProps) {
   const redo = useEditorStore((state) => state.redo)
   const canUndo = useEditorStore((state) => state.past.length > 0)
   const canRedo = useEditorStore((state) => state.future.length > 0)
+  const [isExportOpen, setIsExportOpen] = useState(false)
 
   return (
     <header className="h-14 shrink-0 border-b border-slate-200 bg-white px-5 flex items-center shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
@@ -51,10 +53,18 @@ function TopBar({ isDarkMode, onToggleTheme }: TopBarProps) {
           <ZoomIn size={14} aria-hidden="true" />
           Zoom
         </button>
-        <button title="Export" className="flex h-8 items-center gap-2 rounded px-3 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">
-          <Download size={14} aria-hidden="true" />
-          Export
-        </button>
+        <div className="relative">
+          <button
+            type="button"
+            title="Export"
+            aria-expanded={isExportOpen}
+            onClick={() => setIsExportOpen((open) => !open)}
+            className="flex h-8 items-center gap-2 rounded px-3 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white"
+          >
+            Export
+          </button>
+          {isExportOpen && <ExportPanel onClose={() => setIsExportOpen(false)} />}
+        </div>
         <button title="History" className="flex h-8 items-center gap-2 rounded px-3 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">
           <History size={14} aria-hidden="true" />
           History

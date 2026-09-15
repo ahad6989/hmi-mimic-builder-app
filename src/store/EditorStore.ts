@@ -84,6 +84,10 @@ interface EditorState {
   addElement: (element: CanvasElement) => void
   updateElement: (id: string, changes: Partial<CanvasElement>, historyKey?: string) => void
   deleteElement: (id: string) => void
+  bringToFront: (id: string) => void
+  sendToBack: (id: string) => void
+  bringForward: (id: string) => void
+  sendBackward: (id: string) => void
 
   /**
    * Move a single element to a new (x, y) position.
@@ -198,6 +202,68 @@ export const useEditorStore = create<EditorState>((set) => {
       return {
         elements: state.elements.filter((element) => element.id !== id),
         selectedElementIds: state.selectedElementIds.filter((selectedId) => selectedId !== id),
+        ...history,
+      }
+    }),
+
+  bringToFront: (id) =>
+    set((state) => {
+      const index = state.elements.findIndex((element) => element.id === id)
+      if (index === -1 || index === state.elements.length - 1) return state
+
+      const history = pushHistory(state)
+      const elements = [...state.elements]
+      const [element] = elements.splice(index, 1)
+      elements.push(element)
+      return {
+        elements,
+        ...history,
+      }
+    }),
+
+  sendToBack: (id) =>
+    set((state) => {
+      const index = state.elements.findIndex((element) => element.id === id)
+      if (index <= 0) return state
+
+      const history = pushHistory(state)
+      const elements = [...state.elements]
+      const [element] = elements.splice(index, 1)
+      elements.unshift(element)
+      return {
+        elements,
+        ...history,
+      }
+    }),
+
+  bringForward: (id) =>
+    set((state) => {
+      const index = state.elements.findIndex((element) => element.id === id)
+      if (index === -1 || index === state.elements.length - 1) return state
+
+      const history = pushHistory(state)
+      const elements = [...state.elements]
+      const nextElement = elements[index + 1]
+      elements[index + 1] = elements[index]
+      elements[index] = nextElement
+      return {
+        elements,
+        ...history,
+      }
+    }),
+
+  sendBackward: (id) =>
+    set((state) => {
+      const index = state.elements.findIndex((element) => element.id === id)
+      if (index <= 0) return state
+
+      const history = pushHistory(state)
+      const elements = [...state.elements]
+      const previousElement = elements[index - 1]
+      elements[index - 1] = elements[index]
+      elements[index] = previousElement
+      return {
+        elements,
         ...history,
       }
     }),
