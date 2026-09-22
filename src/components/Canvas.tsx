@@ -1,28 +1,8 @@
 // =============================================================================
 // Canvas.tsx — The SVG drawing surface
-//
-// Responsibilities (and ONLY these):
-//   1. Own the SVG element via svgRef and pass it to tool hooks
-//   2. Normalize raw pointer events and route them to the active tool
-//   3. Render: grid, artwork layer, selection overlay, draw preview
-//   4. Sync cursor style to the active tool
-//
-// What does NOT belong here:
-//   - Select tool gesture logic       → src/tools/useSelectTool.ts
-//   - Rect tool drawing logic         → will move to src/tools/useRectTool.ts (Week 3)
-//   - Inspector / style editing       → Inspector panel
-//
-// Event routing pattern (the "dispatcher" from the SRS):
-//
-//   Raw pointer event
-//     → handleSVGMouseDown / handleSVGMouseMove / handleSVGMouseUp
-//       → checks activeTool
-//         → delegates to the correct tool hook's handler
-//           → tool hook calls Zustand actions
-//             → Zustand notifies React → Canvas re-renders
 // =============================================================================
 
-import { useRef, useState, useEffect } from 'react'
+import { useCallback, useRef, useState, useEffect } from 'react'
 import { useEditorStore } from '../store/EditorStore'
 import { getElementBounds } from '../geometry/bounds'
 import { useSelectTool } from '../tools/useSelectTool'
@@ -32,22 +12,20 @@ import { useLineTool } from '../tools/useLineTool'
 import { usePolylineTool } from '../tools/usePolylineTool'
 import { usePenTool } from '../tools/usePenTool'
 import { useResizeTool } from '../tools/useResizeTool'
+import { useRotateTool } from '../tools/useRotateTool'
+import { useTextTool } from '../tools/useTextTool'
 import ShapeRenderer from './ShapeRenderer'
 import SelectionOverlay from './SelectionOverlay'
 import ResizeHandles from './ResizeHandles'
 import DrawPreview from './DrawPreview'
 import ShapeContextMenu from './ShapeContextMenu'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
+import TextEditOverlay from './TextEditOverlay'
 
 const CANVAS_WIDTH  = 800
 const CANVAS_HEIGHT = 600
 const GRID_SIZE     = 20
 
-/** Selection outline padding around element bounding box (SVG units). */
 const TOOL_CURSORS: Record<string, string> = {
   select:  'default',
   rect:    'crosshair',
@@ -55,14 +33,10 @@ const TOOL_CURSORS: Record<string, string> = {
   line:    'crosshair',
   polyline: 'crosshair',
   pen:     'crosshair',
+  text:    'text',
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 function Canvas() {
-  // ---- Zustand subscriptions ----
   const activeTool         = useEditorStore((s) => s.activeTool)
   const elements           = useEditorStore((s) => s.elements)
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds)
@@ -76,17 +50,14 @@ function Canvas() {
   const sendBackward       = useEditorStore((s) => s.sendBackward)
   const undo               = useEditorStore((s) => s.undo)
   const redo               = useEditorStore((s) => s.redo)
+  const editingTextId      = useEditorStore((s) => s.editingTextId)
+  const setEditingTextId   = useEditorStore((s) => s.setEditingTextId)
 
-  // ---- SVG ref ----
-  // A ref to the <svg> DOM element. We pass this to tool hooks so they can
-  // convert screen coordinates to SVG coordinates without needing a React event.
   const svgRef = useRef<SVGSVGElement>(null)
   const canvasRef = useRef<HTMLElement>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
+  const [renderedElements, setRenderedElements] = useState<Record<string, SVGGraphicsElement | null>>({})
 
-  // ---- Tool hooks ----
-  // Each tool hook owns its own internal state and returns event handlers.
-  // Canvas just calls them and wires up the returned handlers.
   const selectTool = useSelectTool(svgRef)
   const rectTool = useRectTool(svgRef)
   const ellipseTool = useEllipseTool(svgRef)
@@ -94,13 +65,25 @@ function Canvas() {
   const polylineTool = usePolylineTool(svgRef)
   const penTool = usePenTool(svgRef)
   const resizeTool = useResizeTool(svgRef)
-
+  const rotateTool = useRotateTool(svgRef)
+  const textTool = useTextTool(svgRef)
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
   const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null)
+  const setRenderedTextRef = useCallback((id: string, node: SVGTextElement | null) => {
+    setRenderedElements((current) => {
+      if (current[id] === node) return current
+      return { ...current, [id]: node }
+    })
+  }, [])
   const selectedElement = selectedElementIds.length === 1
     ? elements.find((element) => element.id === selectedElementIds[0])
     : undefined
-  const selectedBounds = selectedElement ? getElementBounds(selectedElement) : null
+  const selectedBounds = selectedElement
+    ? getElementBounds(selectedElement, renderedElements[selectedElement.id])
+    : null
+  const editingText = editingTextId
+    ? elements.find((element) => element.id === editingTextId && element.type === 'text')
+    : undefined
 
   useKeyboardShortcuts({
     activeTool,
@@ -129,7 +112,6 @@ function Canvas() {
     return () => document.removeEventListener('pointerdown', closeOnOutsidePointer)
   }, [contextMenu])
 
-  // ---- Coordinate conversion (Canvas-level, used for the mouse readout) ----
   const toSVGPoint = (e: React.MouseEvent<SVGSVGElement>) => {
     const svg = svgRef.current
     if (!svg) return { x: 0, y: 0 }
@@ -140,8 +122,6 @@ function Canvas() {
     if (!ctm) return { x: 0, y: 0 }
     return pt.matrixTransform(ctm.inverse())
   }
-
-  // ---- SVG-level event handlers (the dispatcher) ----
 
   const handleSVGMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
     if (activeTool === 'rect') rectTool.onMouseDown(e)
@@ -162,7 +142,7 @@ function Canvas() {
 
     if (activeTool === 'select') {
       resizeTool.onMouseMove(e)
-      // Delegate to select tool — handles real-time drag movement
+      rotateTool.onMouseMove(e)
       selectTool.onMouseMove(e)
     }
   }
@@ -175,18 +155,18 @@ function Canvas() {
 
     if (activeTool === 'select') {
       resizeTool.onMouseUp()
-      // Delegate to select tool — resolves click vs drag ambiguity
+      rotateTool.onMouseUp()
       selectTool.onMouseUp()
     }
   }
 
   const handleSVGClick = (e: React.MouseEvent<SVGSVGElement>) => {
     if (activeTool === 'select') {
-      // Only fires on empty canvas (shapes call stopPropagation)
       selectTool.onCanvasClick()
     }
     if (activeTool === 'polyline') polylineTool.onCanvasClick(e)
     if (activeTool === 'pen') penTool.onCanvasClick()
+    if (activeTool === 'text') textTool.onCanvasClick(e)
   }
 
   const handleSVGDoubleClick = () => {
@@ -209,7 +189,6 @@ function Canvas() {
     })
   }
 
-  // ---- Render ----
   return (
     <main ref={canvasRef} className="relative flex-1 overflow-hidden bg-slate-200 transition-colors dark:bg-slate-950">
 
@@ -230,7 +209,6 @@ function Canvas() {
         onDoubleClick={handleSVGDoubleClick}
       >
 
-        {/* ── Grid ─────────────────────────────────────────────────────── */}
         <defs>
           <pattern id="grid" width={GRID_SIZE} height={GRID_SIZE} patternUnits="userSpaceOnUse">
             <path
@@ -243,35 +221,44 @@ function Canvas() {
         </defs>
         <rect width={CANVAS_WIDTH} height={CANVAS_HEIGHT} fill="url(#grid)" />
 
-        {/* ── Artwork layer ─────────────────────────────────────────────── */}
-        {/*
-          Shapes render here. Selection overlay renders AFTER this group,
-          so it always appears on top regardless of shape count or z-order.
-        */}
         <g id="artwork-layer">
           {elements.map((element) => (
             <ShapeRenderer
               key={element.id}
               element={element}
               activeTool={activeTool}
+              renderedElement={renderedElements[element.id] as SVGTextElement | null | undefined}
+              onTextRef={setRenderedTextRef}
               onElementMouseDown={selectTool.onElementMouseDown}
               onContextMenu={handleShapeContextMenu}
+              onTextClick={(id) => {
+                selectElement(id)
+                setEditingTextId(id)
+              }}
+              isBeingEdited={element.id === editingTextId}
             />
           ))}
         </g>
 
-        {/* ── Selection overlay ─────────────────────────────────────────── */}
-        {/*
-          Rendered AFTER the artwork layer so outlines always sit on top.
-          pointerEvents="none" means mouse events pass through to shapes below.
-        */}
-        <SelectionOverlay elements={elements} selectedElementIds={selectedElementIds} />
+        <SelectionOverlay
+          elements={elements}
+          selectedElementIds={
+            editingTextId
+              ? selectedElementIds.filter((id) => id !== editingTextId)
+              : selectedElementIds
+          }
+          renderedElements={renderedElements}
+        />
 
-        {activeTool === 'select' && (
-          <ResizeHandles element={selectedElement} bounds={selectedBounds} resizeTool={resizeTool} />
+        {activeTool === 'select' && !editingTextId && (
+          <ResizeHandles
+            element={selectedElement}
+            bounds={selectedBounds}
+            resizeTool={resizeTool}
+            rotateTool={rotateTool}
+          />
         )}
 
-        {/* ── Draw previews ─────────────────────────────────────────────── */}
         <DrawPreview
           rectTool={rectTool}
           ellipseTool={ellipseTool}
@@ -281,6 +268,13 @@ function Canvas() {
         />
 
       </svg>
+
+      {editingText && (
+        <TextEditOverlay
+          element={editingText}
+          svgRef={svgRef}
+        />
+      )}
 
       {contextMenu && (
         <ShapeContextMenu
@@ -295,7 +289,6 @@ function Canvas() {
         />
       )}
 
-      {/* ── Status readouts ───────────────────────────────────────────── */}
       <div className="absolute bottom-3 left-3 rounded border border-slate-200 bg-white px-3 py-1 font-mono text-xs text-slate-600 shadow-sm dark:border-slate-300 dark:bg-slate-100 dark:text-slate-700">
         {mousePosition.x}, {mousePosition.y}
       </div>
