@@ -76,6 +76,25 @@ export function toWorldPoint(
   }
 }
 
+/**
+ * Convert a world-space point into browser client coordinates.
+ * This is the exact inverse of toWorldPoint's manual viewport transform.
+ */
+export function toScreenPoint(
+  worldX: number,
+  worldY: number,
+  svgEl: SVGSVGElement,
+  zoom: number,
+  panX: number,
+  panY: number
+): { x: number; y: number } {
+  const rect = svgEl.getBoundingClientRect()
+  return {
+    x: rect.left + worldX * zoom + panX,
+    y: rect.top + worldY * zoom + panY,
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Zoom utilities
 // ---------------------------------------------------------------------------

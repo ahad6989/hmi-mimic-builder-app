@@ -19,6 +19,7 @@ import {
   MousePointer2,
   PenTool,
   Square,
+  Type,
   type LucideIcon,
 } from 'lucide-react'
 import { useEditorStore } from '../store/EditorStore'
@@ -45,6 +46,7 @@ const TOOLS: ToolConfig[] = [
   { tool: 'line', icon: Minus, shortcut: 'L', title: 'Line (L)' },
   { tool: 'polyline', icon: CircleDot, shortcut: 'Y', title: 'Polyline (Y)' },
   { tool: 'pen', icon: PenTool, shortcut: 'P', title: 'Pen (P)' },
+  { tool: 'text', icon: Type, shortcut: 'T', title: 'Text (T)' },
 ]
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import {
   FileText,
+  FilePlus2,
   History,
   Moon,
   Pencil,
@@ -20,6 +21,7 @@ interface TopBarProps {
 function TopBar({ isDarkMode, onToggleTheme }: TopBarProps) {
   const undo = useEditorStore((state) => state.undo)
   const redo = useEditorStore((state) => state.redo)
+  const clearCanvas = useEditorStore((state) => state.clearCanvas)
   const canUndo = useEditorStore((state) => state.past.length > 0)
   const canRedo = useEditorStore((state) => state.future.length > 0)
   const [isExportOpen, setIsExportOpen] = useState(false)
@@ -44,6 +46,19 @@ function TopBar({ isDarkMode, onToggleTheme }: TopBarProps) {
         <button title="File" className="flex h-8 items-center gap-2 rounded px-3 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">
           <FileText size={14} aria-hidden="true" />
           File
+        </button>
+        <button
+          type="button"
+          title="New file"
+          onClick={() => {
+            if (window.confirm('Start a new file? This will clear your current canvas and cannot be undone.')) {
+              clearCanvas()
+            }
+          }}
+          className="flex h-8 items-center gap-2 rounded px-3 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white"
+        >
+          <FilePlus2 size={14} aria-hidden="true" />
+          New
         </button>
         <button title="Edit" className="flex h-8 items-center gap-2 rounded px-3 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">
           <Pencil size={14} aria-hidden="true" />

@@ -1,5 +1,6 @@
 import type { CanvasElement } from '../types/canvas'
 import { jsPDF } from 'jspdf'
+import { getElementBounds } from '../geometry/bounds'
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg'
 
@@ -34,6 +35,13 @@ function styleAttributes(element: CanvasElement): string {
 function elementMarkup(element: CanvasElement): string {
   const style = styleAttributes(element)
   const { transform } = element
+  const bounds = getElementBounds(element)
+  const centerX = bounds.x + bounds.width / 2
+  const centerY = bounds.y + bounds.height / 2
+  const rotation = attribute(
+    'transform',
+    `rotate(${transform.rotation ?? 0} ${centerX} ${centerY})`
+  )
 
   switch (element.type) {
     case 'rect':
@@ -44,6 +52,7 @@ function elementMarkup(element: CanvasElement): string {
         attribute('height', transform.height),
         element.rx !== undefined ? attribute('rx', element.rx) : '',
         element.ry !== undefined ? attribute('ry', element.ry) : '',
+        rotation,
         style,
       ].filter(Boolean).join(' ')} />`
 
@@ -53,6 +62,7 @@ function elementMarkup(element: CanvasElement): string {
         attribute('cy', transform.y + transform.height / 2),
         attribute('rx', transform.width / 2),
         attribute('ry', transform.height / 2),
+        rotation,
         style,
       ].join(' ')} />`
 
@@ -62,20 +72,36 @@ function elementMarkup(element: CanvasElement): string {
         attribute('y1', element.y1 ?? 0),
         attribute('x2', element.x2 ?? 0),
         attribute('y2', element.y2 ?? 0),
+        rotation,
         style,
       ].join(' ')} />`
 
     case 'polyline':
       return `<polyline ${[
         attribute('points', (element.points ?? []).map((point) => `${point.x},${point.y}`).join(' ')),
+        rotation,
         style,
       ].join(' ')} />`
 
     case 'path':
       return `<path ${[
         attribute('d', element.pathData ?? ''),
+        rotation,
         style,
       ].join(' ')} />`
+
+    case 'text':
+      return `<text ${[
+        attribute('x', transform.x),
+        attribute('y', transform.y),
+        attribute('fill', element.textStyle.color),
+        attribute('font-family', element.textStyle.fontFamily),
+        attribute('font-size', element.textStyle.fontSize),
+        attribute('font-weight', element.textStyle.fontWeight),
+        attribute('font-style', element.textStyle.fontStyle),
+        attribute('text-decoration', element.textStyle.textDecoration),
+        rotation,
+      ].join(' ')}>${escapeXml(element.textStyle.content)}</text>`
 
     default:
       return ''

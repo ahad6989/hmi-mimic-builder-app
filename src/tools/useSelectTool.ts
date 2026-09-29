@@ -19,7 +19,6 @@
 
 import { useRef, useCallback } from 'react'
 import { useEditorStore } from '../store/EditorStore'
-import { toWorldPoint } from '../geometry/coordinates'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -98,26 +97,38 @@ export function useSelectTool(
   // useRef — invisible to React's render cycle. Mutating .current never re-renders.
   const dragRef = useRef<DragState | null>(null)
 
-  // ---- World coordinate converter ----
+  // ---- SVG coordinate converter ----
   /**
-   * Converts screen-space mouse coordinates to world-space coordinates.
+   * Converts client (browser) coordinates into the SVG's user-space units —
+   * the same space every CanvasElement stores its geometry in.
    *
-   * We read the viewport via getState() — a direct snapshot at the moment
-   * of the event — rather than subscribing to viewport in the hook.
+   * getScreenCTM() returns the browser's authoritative mapping from SVG user
+   * units to screen pixels, including the viewBox scale factor and the
+   * centring offset applied by preserveAspectRatio="xMidYMid meet". Inverting
+   * it lands exactly on the user-space point beneath the cursor.
    *
-   * Why getState() instead of a hook subscription?
-   *   If we subscribed to viewport here, the hook's callbacks would need
-   *   viewport in their useCallback dependency arrays, which means new
-   *   function references every time the viewport changes (60fps during pan).
-   *   getState() avoids that entirely: we get the current value exactly when
-   *   we need it, with no subscription cost.
+   * This is deliberately the SAME conversion every other tool uses
+   * (useRectTool, useEllipseTool, useLineTool, usePolylineTool, usePenTool,
+   * useTextTool, useResizeTool, useRotateTool). Drawing a shape and dragging
+   * a shape must agree on what "the point under the cursor" means — two
+   * different transforms between those paths makes shapes desync from the
+   * pointer for the whole drag.
+   *
+   * svgRef is read at event time (not subscribed), so the callback identity
+   * stays stable for the duration of a drag.
    */
   const toWorld = useCallback(
     (clientX: number, clientY: number) => {
       const svg = svgRef.current
       if (!svg) return { x: 0, y: 0 }
-      const { viewport } = useEditorStore.getState()
-      return toWorldPoint(clientX, clientY, svg, viewport.zoom, viewport.panX, viewport.panY)
+
+      const point = svg.createSVGPoint()
+      point.x = clientX
+      point.y = clientY
+      const ctm = svg.getScreenCTM()
+      if (!ctm) return { x: 0, y: 0 }
+
+      return point.matrixTransform(ctm.inverse())
     },
     [svgRef]
   )

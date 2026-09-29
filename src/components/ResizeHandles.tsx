@@ -24,15 +24,26 @@ interface ResizeHandlesProps {
   element: CanvasElement | undefined
   bounds: Bounds | null
   resizeTool: {
-    onHandleMouseDown: (event: React.MouseEvent, elementId: string, handle: ResizeHandle) => void
+    onHandleMouseDown: (event: React.MouseEvent, elementId: string, handle: ResizeHandle, bounds?: Bounds) => void
+  }
+  rotateTool: {
+    onHandleMouseDown: (event: React.MouseEvent, elementId: string, bounds: Bounds) => void
   }
 }
 
-function ResizeHandles({ element, bounds, resizeTool }: ResizeHandlesProps) {
+function ResizeHandles({ element, bounds, resizeTool, rotateTool }: ResizeHandlesProps) {
   if (!element || !bounds) return null
 
+  const centerX = bounds.x + bounds.width / 2
+  const centerY = bounds.y + bounds.height / 2
+  const rotation = element.transform.rotation ?? 0
+
   return (
-    <g id="resize-handles" pointerEvents="all">
+    <g
+      id="resize-handles"
+      pointerEvents="all"
+      transform={`rotate(${rotation} ${centerX} ${centerY})`}
+    >
       {RESIZE_HANDLES.map(({ handle, x, y, cursor }) => (
         <rect
           key={handle}
@@ -45,10 +56,30 @@ function ResizeHandles({ element, bounds, resizeTool }: ResizeHandlesProps) {
           strokeWidth="1.5"
           pointerEvents="all"
           style={{ cursor }}
-          onMouseDown={(event) => resizeTool.onHandleMouseDown(event, element.id, handle)}
+          onMouseDown={(event) => resizeTool.onHandleMouseDown(event, element.id, handle, bounds)}
           onClick={(event) => event.stopPropagation()}
         />
       ))}
+      <line
+        x1={centerX}
+        y1={bounds.y}
+        x2={centerX}
+        y2={bounds.y - 28}
+        stroke="#2563eb"
+        strokeWidth="1.5"
+        pointerEvents="none"
+      />
+      <circle
+        cx={centerX}
+        cy={bounds.y - 28}
+        r={5}
+        fill="var(--canvas-background)"
+        stroke="#2563eb"
+        strokeWidth="1.5"
+        style={{ cursor: 'grab' }}
+        onMouseDown={(event) => rotateTool.onHandleMouseDown(event, element.id, bounds)}
+        onClick={(event) => event.stopPropagation()}
+      />
     </g>
   )
 }

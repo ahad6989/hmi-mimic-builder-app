@@ -87,7 +87,7 @@ export function useResizeTool(
   )
 
   const onHandleMouseDown = useCallback(
-    (e: React.MouseEvent, elementId: string, handle: ResizeHandle) => {
+    (e: React.MouseEvent, elementId: string, handle: ResizeHandle, measuredBounds?: Bounds) => {
       e.stopPropagation()
       e.preventDefault()
       const element = useEditorStore.getState().elements.find((item) => item.id === elementId)
@@ -96,7 +96,7 @@ export function useResizeTool(
       dragRef.current = {
         elementId,
         handle,
-        bounds: getElementBounds(element),
+        bounds: measuredBounds ?? getElementBounds(element),
         originalElement: cloneElement(element),
         historyKey: crypto.randomUUID(),
       }
@@ -115,6 +115,22 @@ export function useResizeTool(
       const nextHeight = resizedBounds.bottom - resizedBounds.top
       const scaleX = drag.bounds.width > 0 ? nextWidth / drag.bounds.width : 1
       const scaleY = drag.bounds.height > 0 ? nextHeight / drag.bounds.height : 1
+
+      if (drag.originalElement.type === 'text') {
+        const scale = hasHandle(drag.handle, 'left') || hasHandle(drag.handle, 'right')
+          ? hasHandle(drag.handle, 'top') || hasHandle(drag.handle, 'bottom')
+            ? (scaleX + scaleY) / 2
+            : scaleX
+          : scaleY
+        const textStyle = drag.originalElement.textStyle
+        useEditorStore.getState().updateElement(drag.elementId, {
+          textStyle: {
+            ...textStyle,
+            fontSize: Math.max(1, textStyle.fontSize * scale),
+          },
+        }, drag.historyKey)
+        return
+      }
 
       resizeElement(
         drag.elementId,

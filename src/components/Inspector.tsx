@@ -191,6 +191,45 @@ function ColorField({ label, value, opacity, onColorCommit, onOpacityCommit }: C
   )
 }
 
+function TextColorField({ value, onCommit }: { value: string; onCommit: (value: string) => void }) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-slate-300 bg-slate-100 px-2 py-1.5 dark:border-slate-600 dark:bg-slate-800">
+      <span className="text-xs text-slate-500 dark:text-slate-400">Color</span>
+      <input
+        type="color"
+        value={value}
+        onChange={(event) => onCommit(event.currentTarget.value)}
+        className="h-5 w-5 cursor-pointer rounded border border-slate-300 bg-white p-0.5 dark:border-slate-600 dark:bg-slate-700"
+        aria-label="Text color"
+      />
+      <span className="font-mono text-xs uppercase text-slate-600 dark:text-slate-300">{value}</span>
+    </div>
+  )
+}
+
+function TextBackgroundField({ value, onCommit }: { value: string; onCommit: (value: string) => void }) {
+  const hasBackground = value !== 'transparent'
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-slate-300 bg-slate-100 px-2 py-1.5 dark:border-slate-600 dark:bg-slate-800">
+      <span className="text-xs text-slate-500 dark:text-slate-400">Background</span>
+      <input
+        type="color"
+        value={hasBackground ? value : '#ffffff'}
+        onChange={(event) => onCommit(event.currentTarget.value)}
+        className="h-5 w-5 cursor-pointer rounded border border-slate-300 bg-white p-0.5 dark:border-slate-600 dark:bg-slate-700"
+        aria-label="Text background color"
+      />
+      <button
+        type="button"
+        onClick={() => onCommit('transparent')}
+        className="ml-auto text-[10px] text-slate-500 underline hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100"
+      >
+        {hasBackground ? 'Transparent' : 'Transparent'}
+      </button>
+    </div>
+  )
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-2 border-b border-slate-200 pb-4 last:border-0 dark:border-slate-700">
@@ -348,6 +387,84 @@ function Inspector() {
               ) : <div />}
             </div>
           </Section>
+
+          {selectedElement.type === 'text' && (
+            <Section title="Text">
+              <label className="block text-xs text-slate-500 dark:text-slate-400">
+                Font family
+                <select
+                  value={selectedElement.textStyle.fontFamily}
+                  onChange={(event) => updateElement(selectedElement.id, {
+                    textStyle: { ...selectedElement.textStyle, fontFamily: event.target.value },
+                  })}
+                  className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-slate-100 px-2 text-sm text-slate-700 outline-none focus:ring-1 focus:ring-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                >
+                  <option value="sans-serif">sans-serif</option>
+                  <option value="serif">serif</option>
+                  <option value="monospace">monospace</option>
+                  <option value="cursive">cursive</option>
+                </select>
+              </label>
+              <NumberField
+                fieldKey={`${selectedElement.id}-font-size`}
+                label="Size"
+                value={selectedElement.textStyle.fontSize}
+                onCommit={(value) => updateElement(selectedElement.id, {
+                  textStyle: { ...selectedElement.textStyle, fontSize: Math.max(1, value) },
+                })}
+              />
+              <div className="grid grid-cols-3 gap-1">
+                <button
+                  type="button"
+                  onClick={() => updateElement(selectedElement.id, {
+                    textStyle: {
+                      ...selectedElement.textStyle,
+                      fontWeight: selectedElement.textStyle.fontWeight === 'bold' ? 'normal' : 'bold',
+                    },
+                  })}
+                  className={`rounded border px-2 py-1.5 text-xs font-bold ${selectedElement.textStyle.fontWeight === 'bold' ? 'border-blue-500 bg-blue-100 text-blue-700' : 'border-slate-300 text-slate-600 dark:border-slate-600 dark:text-slate-300'}`}
+                >
+                  Bold
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateElement(selectedElement.id, {
+                    textStyle: {
+                      ...selectedElement.textStyle,
+                      fontStyle: selectedElement.textStyle.fontStyle === 'italic' ? 'normal' : 'italic',
+                    },
+                  })}
+                  className={`rounded border px-2 py-1.5 text-xs italic ${selectedElement.textStyle.fontStyle === 'italic' ? 'border-blue-500 bg-blue-100 text-blue-700' : 'border-slate-300 text-slate-600 dark:border-slate-600 dark:text-slate-300'}`}
+                >
+                  Italic
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateElement(selectedElement.id, {
+                    textStyle: {
+                      ...selectedElement.textStyle,
+                      textDecoration: selectedElement.textStyle.textDecoration === 'underline' ? 'none' : 'underline',
+                    },
+                  })}
+                  className={`rounded border px-2 py-1.5 text-xs underline ${selectedElement.textStyle.textDecoration === 'underline' ? 'border-blue-500 bg-blue-100 text-blue-700' : 'border-slate-300 text-slate-600 dark:border-slate-600 dark:text-slate-300'}`}
+                >
+                  Underline
+                </button>
+              </div>
+              <TextColorField
+                value={selectedElement.textStyle.color}
+                onCommit={(value) => updateElement(selectedElement.id, {
+                  textStyle: { ...selectedElement.textStyle, color: value },
+                })}
+              />
+              <TextBackgroundField
+                value={selectedElement.textStyle.backgroundColor ?? 'transparent'}
+                onCommit={(value) => updateElement(selectedElement.id, {
+                  textStyle: { ...selectedElement.textStyle, backgroundColor: value },
+                })}
+              />
+            </Section>
+          )}
 
           <Section title="Fill">
             <ColorField

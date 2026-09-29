@@ -21,6 +21,7 @@ import {
 
 const ELEMENTS_STORAGE_KEY = 'vectorcraft-elements'
 const AUTOSAVE_DELAY_MS = 400
+const DEFAULT_VIEWPORT: Viewport = { zoom: 1, panX: 40, panY: 40 }
 
 function loadSavedElements(): CanvasElement[] {
   try {
@@ -74,6 +75,7 @@ interface EditorState {
   // ---- Selection ----
   /** IDs of every currently selected element. Array supports multi-select later. */
   selectedElementIds: string[]
+  editingTextId: string | null
 
   // ---- Viewport ----
   viewport: Viewport
@@ -84,6 +86,7 @@ interface EditorState {
   addElement: (element: CanvasElement) => void
   updateElement: (id: string, changes: Partial<CanvasElement>, historyKey?: string) => void
   deleteElement: (id: string) => void
+  clearCanvas: () => void
   bringToFront: (id: string) => void
   sendToBack: (id: string) => void
   bringForward: (id: string) => void
@@ -102,12 +105,14 @@ interface EditorState {
     originalElement: CanvasElement,
     historyKey?: string
   ) => void
+  rotateElement: (id: string, rotation: number, historyKey?: string) => void
 
   undo: () => void
   redo: () => void
 
   selectElement: (id: string) => void
   clearSelection: () => void
+  setEditingTextId: (id: string | null) => void
 
   /**
    * Replace the entire viewport state in one atomic update.
@@ -128,6 +133,7 @@ export const useEditorStore = create<EditorState>((set) => {
     ...element,
     transform: { ...element.transform },
     style: { ...element.style },
+    textStyle: { ...element.textStyle },
     points: element.points?.map((point) => ({
       ...point,
       ...(point.handleOut ? { handleOut: { ...point.handleOut } } : {}),
@@ -160,9 +166,10 @@ export const useEditorStore = create<EditorState>((set) => {
 
   // Nothing selected
   selectedElementIds: [],
+  editingTextId: null,
 
   // Initial viewport: 100% zoom, artboard offset 40px from canvas edges
-  viewport: { zoom: 1, panX: 40, panY: 40 },
+  viewport: DEFAULT_VIEWPORT,
 
   // ---- Tool actions ----
 
@@ -205,6 +212,18 @@ export const useEditorStore = create<EditorState>((set) => {
         ...history,
       }
     }),
+
+  clearCanvas: () => {
+    activeHistoryKey = null
+    set({
+      elements: [],
+      past: [],
+      future: [],
+      selectedElementIds: [],
+      editingTextId: null,
+      viewport: DEFAULT_VIEWPORT,
+    })
+  },
 
   bringToFront: (id) =>
     set((state) => {
@@ -291,15 +310,38 @@ export const useEditorStore = create<EditorState>((set) => {
           transform: { ...el.transform, x, y },
         }
 
-        if (el.type !== 'line') return nextElement
-
-        return {
-          ...nextElement,
-          x1: (el.x1 ?? 0) + deltaX,
-          y1: (el.y1 ?? 0) + deltaY,
-          x2: (el.x2 ?? 0) + deltaX,
-          y2: (el.y2 ?? 0) + deltaY,
+        if (el.type === 'line') {
+          return {
+            ...nextElement,
+            x1: (el.x1 ?? 0) + deltaX,
+            y1: (el.y1 ?? 0) + deltaY,
+            x2: (el.x2 ?? 0) + deltaX,
+            y2: (el.y2 ?? 0) + deltaY,
+          }
         }
+
+        if (el.points) {
+          const points = el.points.map((point) => ({
+            x: point.x + deltaX,
+            y: point.y + deltaY,
+            ...(point.handleOut
+              ? {
+                  handleOut: {
+                    x: point.handleOut.x + deltaX,
+                    y: point.handleOut.y + deltaY,
+                  },
+                }
+              : {}),
+          }))
+
+          return {
+            ...nextElement,
+            points,
+            ...(el.type === 'path' ? { pathData: buildPathData(points) } : {}),
+          }
+        }
+
+        return nextElement
         }),
         ...history,
       }
@@ -362,6 +404,22 @@ export const useEditorStore = create<EditorState>((set) => {
       }
     }),
 
+  rotateElement: (id, rotation, historyKey) =>
+    set((state) => {
+      const element = state.elements.find((item) => item.id === id)
+      if (!element) return state
+
+      const history = pushHistory(state, historyKey)
+      return {
+        elements: state.elements.map((item) =>
+          item.id === id
+            ? { ...item, transform: { ...item.transform, rotation } }
+            : item
+        ),
+        ...history,
+      }
+    }),
+
   undo: () =>
     set((state) => {
       if (state.past.length === 0) return state
@@ -395,6 +453,8 @@ export const useEditorStore = create<EditorState>((set) => {
 
   /** Deselect everything. */
   clearSelection: () => set({ selectedElementIds: [] }),
+
+  setEditingTextId: (id) => set({ editingTextId: id }),
 
   /** Replace the entire viewport (zoom + pan) atomically. */
   setViewport: (viewport) => set({ viewport }),

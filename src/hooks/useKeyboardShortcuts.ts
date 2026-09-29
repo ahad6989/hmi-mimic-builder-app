@@ -78,6 +78,7 @@ export function useKeyboardShortcuts({
         case 'v': case 'V': setActiveTool('select'); break
         case 'r': case 'R': setActiveTool('rect'); break
         case 'y': case 'Y': setActiveTool('polyline'); break
+        case 't': case 'T': setActiveTool('text'); break
       }
     }
     document.addEventListener('keydown', onKeyDown)

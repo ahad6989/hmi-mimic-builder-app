@@ -17,6 +17,7 @@ export type Tool =
   | 'line'
   | 'polyline'
   | 'pen'
+  | 'text'
 
 // ---------------------------------------------------------------------------
 // Shape types
@@ -49,6 +50,17 @@ export interface StyleAttributes {
   strokeDashArray: string       // e.g. '' (solid), '6 4' (dashed), '2 4' (dotted)
   strokeLineCap: 'butt' | 'round' | 'square'
   strokeLineJoin: 'miter' | 'round' | 'bevel'
+}
+
+export interface TextStyleAttributes {
+  content: string
+  fontFamily: string
+  fontSize: number
+  fontWeight: 'normal' | 'bold'
+  fontStyle: 'normal' | 'italic'
+  textDecoration: 'none' | 'underline'
+  color: string
+  backgroundColor?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -97,6 +109,7 @@ export interface CanvasElement {
 
   // Appearance
   style: StyleAttributes
+  textStyle: TextStyleAttributes
 
   // --- Type-specific optional fields ---
   rx?: number             // Horizontal corner radius (rect only)
@@ -130,6 +143,17 @@ export const DEFAULT_STYLE: StyleAttributes = {
   strokeLineJoin: 'miter',
 }
 
+export const DEFAULT_TEXT_STYLE: TextStyleAttributes = {
+  content: '',
+  fontFamily: 'sans-serif',
+  fontSize: 16,
+  fontWeight: 'normal',
+  fontStyle: 'normal',
+  textDecoration: 'none',
+  color: '#000000',
+  backgroundColor: 'transparent',
+}
+
 /** Create a ready-to-store rect element from raw geometry. */
 export function createRectElement(
   x: number,
@@ -146,6 +170,7 @@ export function createRectElement(
     locked: false,
     transform: { x, y, width, height, rotation: 0 },
     style: { ...DEFAULT_STYLE, ...overrides },
+    textStyle: { ...DEFAULT_TEXT_STYLE },
   }
 }
 
@@ -171,6 +196,7 @@ export function createEllipseElement(
       rotation: 0,
     },
     style: { ...DEFAULT_STYLE, ...overrides },
+    textStyle: { ...DEFAULT_TEXT_STYLE },
   }
 }
 
@@ -205,6 +231,7 @@ export function createLineElement(
     y1,
     x2,
     y2,
+    textStyle: { ...DEFAULT_TEXT_STYLE },
   }
 }
 
@@ -238,6 +265,7 @@ export function createPolylineElement(
       fill: 'none',
     },
     points: copiedPoints,
+    textStyle: { ...DEFAULT_TEXT_STYLE },
   }
 }
 
@@ -290,5 +318,19 @@ export function createPathElement(
     },
     points: copiedPoints,
     pathData,
+    textStyle: { ...DEFAULT_TEXT_STYLE },
+  }
+}
+
+export function createTextElement(x: number, y: number): CanvasElement {
+  return {
+    id: crypto.randomUUID(),
+    name: 'Text',
+    type: 'text',
+    visible: true,
+    locked: false,
+    transform: { x, y, width: 0, height: DEFAULT_TEXT_STYLE.fontSize, rotation: 0 },
+    style: { ...DEFAULT_STYLE, fill: DEFAULT_TEXT_STYLE.color },
+    textStyle: { ...DEFAULT_TEXT_STYLE },
   }
 }
