@@ -64,6 +64,33 @@ function getAnchorPoint(bounds: Bounds, handle: ResizeHandle) {
   }
 }
 
+/**
+ * Transforms an SVG (world) point into an element's local (unrotated) coordinate
+ * system. The element is rendered inside a <g transform="rotate(angle cx cy)">,
+ * so mouse coordinates in SVG space must be counter-rotated to match the
+ * element's own transform.x / width / height values.
+ */
+function toLocalPoint(
+  point: { x: number; y: number },
+  bounds: Bounds,
+  rotation: number
+): { x: number; y: number } {
+  if (rotation === 0) return point
+
+  const angle = (rotation * Math.PI) / 180
+  const cos = Math.cos(angle)
+  const sin = Math.sin(angle)
+  const cx = bounds.x + bounds.width / 2
+  const cy = bounds.y + bounds.height / 2
+  const dx = point.x - cx
+  const dy = point.y - cy
+
+  return {
+    x: dx * cos - dy * sin + cx,
+    y: dx * sin + dy * cos + cy,
+  }
+}
+
 export function useResizeTool(
   svgRef: React.RefObject<SVGSVGElement | null>
 ) {
@@ -110,7 +137,8 @@ export function useResizeTool(
       if (!drag) return
 
       const point = toSVGPoint(e.clientX, e.clientY)
-      const resizedBounds = getResizedBounds(drag.bounds, drag.handle, point)
+      const localPoint = toLocalPoint(point, drag.bounds, drag.originalElement.transform.rotation ?? 0)
+      const resizedBounds = getResizedBounds(drag.bounds, drag.handle, localPoint)
       const nextWidth = resizedBounds.right - resizedBounds.left
       const nextHeight = resizedBounds.bottom - resizedBounds.top
       const scaleX = drag.bounds.width > 0 ? nextWidth / drag.bounds.width : 1
