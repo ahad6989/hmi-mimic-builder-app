@@ -4,6 +4,35 @@ import { getElementBounds } from '../geometry/bounds'
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg'
 
+const CSS_VAR_PATTERN = /^var\(\s*(--[\w-]+)\s*(?:,\s*(.+)\s*)?\)$/
+
+/**
+ * Resolves CSS custom property references (e.g. "var(--canvas-default-fill)")
+ * to their actual computed color values.
+ *
+ * Exported SVG/PNG/JPEG/PDF files are standalone — they have no access to the
+ * application's CSS variables, so any var(...) reference would render blank.
+ * This function resolves them at export time using getComputedStyle, matching
+ * whatever the element actually looks like on screen in the current theme.
+ */
+function resolveColor(value: string): string {
+  if (!value.startsWith('var(')) return value
+
+  const match = value.match(CSS_VAR_PATTERN)
+  if (!match) return value
+
+  const varName = match[1]
+  const fallback = match[2] !== undefined ? resolveColor(match[2]) : ''
+
+  // CSS variables are defined on :root (light mode) and overridden on .dark.
+  // The app applies .dark to its root div — not to <html> — so we target it.
+  const target = document.querySelector('.dark') ?? document.documentElement
+  const resolved = getComputedStyle(target).getPropertyValue(varName).trim()
+
+  if (resolved) return resolved
+  return fallback
+}
+
 function escapeXml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -20,9 +49,9 @@ function attribute(name: string, value: string | number): string {
 function styleAttributes(element: CanvasElement): string {
   const { style } = element
   return [
-    attribute('fill', style.fill),
+    attribute('fill', resolveColor(style.fill)),
     attribute('fill-opacity', style.fillOpacity),
-    attribute('stroke', style.stroke),
+    attribute('stroke', resolveColor(style.stroke)),
     attribute('stroke-opacity', style.strokeOpacity),
     attribute('stroke-width', style.strokeWidth),
     attribute('opacity', style.opacity),
@@ -94,7 +123,7 @@ function elementMarkup(element: CanvasElement): string {
       return `<text ${[
         attribute('x', transform.x),
         attribute('y', transform.y),
-        attribute('fill', element.textStyle.color),
+        attribute('fill', resolveColor(element.textStyle.color)),
         attribute('font-family', element.textStyle.fontFamily),
         attribute('font-size', element.textStyle.fontSize),
         attribute('font-weight', element.textStyle.fontWeight),
