@@ -141,6 +141,14 @@ function Canvas() {
     }
   }, [editingTextId])
 
+  useEffect(() => {
+    const handlePointerUp = () => {
+      if (isPanning) setIsPanning(false)
+    }
+    window.addEventListener('pointerup', handlePointerUp)
+    return () => window.removeEventListener('pointerup', handlePointerUp)
+  }, [isPanning])
+
   const toSVGPoint = (e: React.MouseEvent<SVGSVGElement>) => {
     const svg = svgRef.current
     if (!svg) return { x: 0, y: 0 }
