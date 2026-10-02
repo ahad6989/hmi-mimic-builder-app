@@ -35,10 +35,10 @@ export const MAX_ZOOM = 10    // 1000%
 /**
  * How fast the mouse wheel zooms.
  * We use Math.exp(-deltaY * ZOOM_SENSITIVITY) so that:
- *   - A mouse scroll wheel (deltaY ≈ 100) gives ~10% zoom per tick
+ *   - A mouse scroll wheel (deltaY ≈ 100) gives noticeable zoom per tick
  *   - A trackpad (deltaY ≈ 1–3) gives tiny smooth increments
  */
-const ZOOM_SENSITIVITY = 0.001
+const ZOOM_SENSITIVITY = 0.005
 
 // ---------------------------------------------------------------------------
 // Core conversion
