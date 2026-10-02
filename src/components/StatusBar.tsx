@@ -1,6 +1,8 @@
 import { Crosshair, ZoomIn } from 'lucide-react'
+import { useEditorStore } from '../store/EditorStore'
 
 function StatusBar() {
+  const viewport = useEditorStore((state) => state.viewport)
   return (
     <footer className="flex h-8 shrink-0 items-center border-t border-slate-200 bg-white px-4 text-[11px] text-slate-500 transition-colors dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
       <div className="flex items-center gap-2">
@@ -11,7 +13,7 @@ function StatusBar() {
       </div>
       <div className="ml-auto flex items-center gap-2">
         <ZoomIn size={13} aria-hidden="true" />
-        <span className="font-mono tabular-nums">Zoom: 100%</span>
+        <span className="font-mono tabular-nums">Zoom: {Math.round(viewport.zoom * 100)}%</span>
       </div>
     </footer>
   )

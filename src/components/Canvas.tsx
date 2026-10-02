@@ -5,6 +5,7 @@
 import { useCallback, useRef, useState, useEffect } from 'react'
 import { useEditorStore } from '../store/EditorStore'
 import { getElementBounds } from '../geometry/bounds'
+import { computeFocalZoom } from '../geometry/coordinates'
 import { useSelectTool } from '../tools/useSelectTool'
 import { useRectTool } from '../tools/useRectTool'
 import { useEllipseTool } from '../tools/useEllipseTool'
@@ -52,6 +53,12 @@ function Canvas() {
   const redo               = useEditorStore((s) => s.redo)
   const editingTextId      = useEditorStore((s) => s.editingTextId)
   const setEditingTextId   = useEditorStore((s) => s.setEditingTextId)
+  const viewport           = useEditorStore((s) => s.viewport)
+  const setViewport        = useEditorStore((s) => s.setViewport)
+
+  const [isSpacePressed, setIsSpacePressed] = useState(false)
+  const [isPanning, setIsPanning] = useState(false)
+  const [panStart, setPanStart] = useState({ x: 0, y: 0, panX: 0, panY: 0 })
 
   const svgRef = useRef<SVGSVGElement>(null)
   const canvasRef = useRef<HTMLElement>(null)
@@ -112,6 +119,28 @@ function Canvas() {
     return () => document.removeEventListener('pointerdown', closeOnOutsidePointer)
   }, [contextMenu])
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !editingTextId) {
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+        e.preventDefault()
+        setIsSpacePressed(true)
+      }
+    }
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setIsSpacePressed(false)
+        setIsPanning(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
+  }, [editingTextId])
+
   const toSVGPoint = (e: React.MouseEvent<SVGSVGElement>) => {
     const svg = svgRef.current
     if (!svg) return { x: 0, y: 0 }
@@ -124,6 +153,12 @@ function Canvas() {
   }
 
   const handleSVGMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (e.button === 1 || isSpacePressed) {
+      setIsPanning(true)
+      setPanStart({ x: e.clientX, y: e.clientY, panX: viewport.panX, panY: viewport.panY })
+      return
+    }
+
     if (activeTool === 'rect') rectTool.onMouseDown(e)
     if (activeTool === 'ellipse') ellipseTool.onMouseDown(e)
     if (activeTool === 'line') lineTool.onMouseDown(e)
@@ -131,6 +166,13 @@ function Canvas() {
   }
 
   const handleSVGMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (isPanning) {
+      const dx = e.clientX - panStart.x
+      const dy = e.clientY - panStart.y
+      setViewport({ ...viewport, panX: panStart.panX + dx, panY: panStart.panY + dy })
+      return
+    }
+
     const pt = toSVGPoint(e)
     setMousePosition({ x: Math.round(pt.x), y: Math.round(pt.y) })
 
@@ -148,6 +190,11 @@ function Canvas() {
   }
 
   const handleSVGMouseUp = () => {
+    if (isPanning) {
+      setIsPanning(false)
+      return
+    }
+
     if (activeTool === 'rect') rectTool.onMouseUp()
     if (activeTool === 'ellipse') ellipseTool.onMouseUp()
     if (activeTool === 'line') lineTool.onMouseUp()
@@ -189,6 +236,29 @@ function Canvas() {
     })
   }
 
+  const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
+    const svg = svgRef.current
+    if (!svg) return
+    const rect = svg.getBoundingClientRect()
+    const mouseX = e.clientX - rect.left
+    const mouseY = e.clientY - rect.top
+    const newViewport = computeFocalZoom(
+      viewport.zoom,
+      viewport.panX,
+      viewport.panY,
+      mouseX,
+      mouseY,
+      e.deltaY
+    )
+    setViewport(newViewport)
+  }
+
+  const getCursor = () => {
+    if (isPanning) return 'grabbing'
+    if (isSpacePressed) return 'grab'
+    return TOOL_CURSORS[activeTool] ?? 'default'
+  }
+
   return (
     <main ref={canvasRef} className="relative flex-1 overflow-hidden bg-slate-200 transition-colors dark:bg-slate-950">
 
@@ -199,7 +269,7 @@ function Canvas() {
         viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
         className="border border-slate-300 shadow-sm dark:border-slate-700"
         style={{
-          cursor: TOOL_CURSORS[activeTool] ?? 'default',
+          cursor: getCursor(),
           backgroundColor: 'var(--canvas-background)',
         }}
         onMouseDown={handleSVGMouseDown}
@@ -207,6 +277,7 @@ function Canvas() {
         onMouseUp={handleSVGMouseUp}
         onClick={handleSVGClick}
         onDoubleClick={handleSVGDoubleClick}
+        onWheel={handleWheel}
       >
 
         <defs>
@@ -219,53 +290,56 @@ function Canvas() {
             />
           </pattern>
         </defs>
-        <rect width={CANVAS_WIDTH} height={CANVAS_HEIGHT} fill="url(#grid)" />
+        
+        <g transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}>
+          <rect x="-50000" y="-50000" width="100000" height="100000" fill="url(#grid)" />
 
-        <g id="artwork-layer">
-          {elements.map((element) => (
-            <ShapeRenderer
-              key={element.id}
-              element={element}
-              activeTool={activeTool}
-              renderedElement={renderedElements[element.id] as SVGTextElement | null | undefined}
-              onTextRef={setRenderedTextRef}
-              onElementMouseDown={selectTool.onElementMouseDown}
-              onContextMenu={handleShapeContextMenu}
-              onTextClick={(id) => {
-                selectElement(id)
-                setEditingTextId(id)
-              }}
-              isBeingEdited={element.id === editingTextId}
-            />
-          ))}
-        </g>
+          <g id="artwork-layer">
+            {elements.map((element) => (
+              <ShapeRenderer
+                key={element.id}
+                element={element}
+                activeTool={activeTool}
+                renderedElement={renderedElements[element.id] as SVGTextElement | null | undefined}
+                onTextRef={setRenderedTextRef}
+                onElementMouseDown={selectTool.onElementMouseDown}
+                onContextMenu={handleShapeContextMenu}
+                onTextClick={(id) => {
+                  selectElement(id)
+                  setEditingTextId(id)
+                }}
+                isBeingEdited={element.id === editingTextId}
+              />
+            ))}
+          </g>
 
-        <SelectionOverlay
-          elements={elements}
-          selectedElementIds={
-            editingTextId
-              ? selectedElementIds.filter((id) => id !== editingTextId)
-              : selectedElementIds
-          }
-          renderedElements={renderedElements}
-        />
-
-        {activeTool === 'select' && !editingTextId && (
-          <ResizeHandles
-            element={selectedElement}
-            bounds={selectedBounds}
-            resizeTool={resizeTool}
-            rotateTool={rotateTool}
+          <SelectionOverlay
+            elements={elements}
+            selectedElementIds={
+              editingTextId
+                ? selectedElementIds.filter((id) => id !== editingTextId)
+                : selectedElementIds
+            }
+            renderedElements={renderedElements}
           />
-        )}
 
-        <DrawPreview
-          rectTool={rectTool}
-          ellipseTool={ellipseTool}
-          lineTool={lineTool}
-          polylineTool={polylineTool}
-          penTool={penTool}
-        />
+          {activeTool === 'select' && !editingTextId && (
+            <ResizeHandles
+              element={selectedElement}
+              bounds={selectedBounds}
+              resizeTool={resizeTool}
+              rotateTool={rotateTool}
+            />
+          )}
+
+          <DrawPreview
+            rectTool={rectTool}
+            ellipseTool={ellipseTool}
+            lineTool={lineTool}
+            polylineTool={polylineTool}
+            penTool={penTool}
+          />
+        </g>
 
       </svg>
 

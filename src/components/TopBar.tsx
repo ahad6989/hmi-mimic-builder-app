@@ -24,6 +24,8 @@ function TopBar({ isDarkMode, onToggleTheme }: TopBarProps) {
   const clearCanvas = useEditorStore((state) => state.clearCanvas)
   const canUndo = useEditorStore((state) => state.past.length > 0)
   const canRedo = useEditorStore((state) => state.future.length > 0)
+  const viewport = useEditorStore((state) => state.viewport)
+  const setViewport = useEditorStore((state) => state.setViewport)
   const [isExportOpen, setIsExportOpen] = useState(false)
 
   return (
@@ -64,10 +66,32 @@ function TopBar({ isDarkMode, onToggleTheme }: TopBarProps) {
           <Pencil size={14} aria-hidden="true" />
           Edit
         </button>
-        <button title="Zoom" className="flex h-8 items-center gap-2 rounded px-3 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">
-          <ZoomIn size={14} aria-hidden="true" />
-          Zoom
-        </button>
+        <div className="relative group">
+          <button title="Zoom" className="flex h-8 items-center gap-2 rounded px-3 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">
+            <ZoomIn size={14} aria-hidden="true" />
+            Zoom
+          </button>
+          <div className="absolute top-full left-0 mt-1 hidden w-32 flex-col rounded-md border border-slate-200 bg-white p-1 shadow-lg group-hover:flex dark:border-slate-700 dark:bg-slate-800">
+            <button
+              onClick={() => setViewport({ ...viewport, zoom: Math.min(10, viewport.zoom * 1.5) })}
+              className="flex w-full items-center px-2 py-1.5 text-left text-xs transition-colors hover:bg-slate-100 dark:hover:bg-slate-700"
+            >
+              Zoom In
+            </button>
+            <button
+              onClick={() => setViewport({ ...viewport, zoom: Math.max(0.1, viewport.zoom / 1.5) })}
+              className="flex w-full items-center px-2 py-1.5 text-left text-xs transition-colors hover:bg-slate-100 dark:hover:bg-slate-700"
+            >
+              Zoom Out
+            </button>
+            <button
+              onClick={() => setViewport({ ...viewport, zoom: 1 })}
+              className="flex w-full items-center px-2 py-1.5 text-left text-xs transition-colors hover:bg-slate-100 dark:hover:bg-slate-700"
+            >
+              Zoom to 100%
+            </button>
+          </div>
+        </div>
         <div className="relative">
           <button
             type="button"
