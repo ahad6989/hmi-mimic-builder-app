@@ -290,23 +290,39 @@ function Canvas() {
       // Prevent browser's native page zoom (Ctrl+Wheel / Pinch) and scrolling
       e.preventDefault()
 
-      const rect = svg.getBoundingClientRect()
-      const mouseX = e.clientX - rect.left
-      const mouseY = e.clientY - rect.top
-      const newViewport = computeFocalZoom(
-        viewport.zoom,
-        viewport.panX,
-        viewport.panY,
-        mouseX,
-        mouseY,
-        e.deltaY
-      )
-      setViewport(newViewport)
+      const currentViewport = useEditorStore.getState().viewport
+
+      if (e.ctrlKey || e.metaKey) {
+        // Pinch-to-zoom or Ctrl+Scroll = ZOOM
+        const rect = svg.getBoundingClientRect()
+        const mouseX = e.clientX - rect.left
+        const mouseY = e.clientY - rect.top
+        
+        const newViewport = computeFocalZoom(
+          currentViewport.zoom,
+          currentViewport.panX,
+          currentViewport.panY,
+          mouseX,
+          mouseY,
+          e.deltaY
+        )
+        setViewport(newViewport)
+      } else {
+        // Two-finger trackpad scroll or standard mouse wheel = PAN
+        const dx = e.shiftKey && e.deltaX === 0 ? e.deltaY : e.deltaX
+        const dy = e.shiftKey && e.deltaX === 0 ? 0 : e.deltaY
+        
+        setViewport({
+          ...currentViewport,
+          panX: currentViewport.panX - dx,
+          panY: currentViewport.panY - dy
+        })
+      }
     }
 
     svg.addEventListener('wheel', handleNativeWheel, { passive: false })
     return () => svg.removeEventListener('wheel', handleNativeWheel)
-  }, [viewport, setViewport])
+  }, [setViewport])
 
   const getCursor = () => {
     if (isPanning) return 'grabbing'
