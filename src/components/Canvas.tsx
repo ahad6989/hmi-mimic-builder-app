@@ -236,22 +236,31 @@ function Canvas() {
     })
   }
 
-  const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
+  useEffect(() => {
     const svg = svgRef.current
     if (!svg) return
-    const rect = svg.getBoundingClientRect()
-    const mouseX = e.clientX - rect.left
-    const mouseY = e.clientY - rect.top
-    const newViewport = computeFocalZoom(
-      viewport.zoom,
-      viewport.panX,
-      viewport.panY,
-      mouseX,
-      mouseY,
-      e.deltaY
-    )
-    setViewport(newViewport)
-  }
+
+    const handleNativeWheel = (e: WheelEvent) => {
+      // Prevent browser's native page zoom (Ctrl+Wheel / Pinch) and scrolling
+      e.preventDefault()
+
+      const rect = svg.getBoundingClientRect()
+      const mouseX = e.clientX - rect.left
+      const mouseY = e.clientY - rect.top
+      const newViewport = computeFocalZoom(
+        viewport.zoom,
+        viewport.panX,
+        viewport.panY,
+        mouseX,
+        mouseY,
+        e.deltaY
+      )
+      setViewport(newViewport)
+    }
+
+    svg.addEventListener('wheel', handleNativeWheel, { passive: false })
+    return () => svg.removeEventListener('wheel', handleNativeWheel)
+  }, [viewport, setViewport])
 
   const getCursor = () => {
     if (isPanning) return 'grabbing'
@@ -277,7 +286,6 @@ function Canvas() {
         onMouseUp={handleSVGMouseUp}
         onClick={handleSVGClick}
         onDoubleClick={handleSVGDoubleClick}
-        onWheel={handleWheel}
       >
 
         <defs>
