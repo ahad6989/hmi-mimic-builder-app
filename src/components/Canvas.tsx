@@ -58,7 +58,15 @@ function Canvas() {
 
   const [isSpacePressed, setIsSpacePressed] = useState(false)
   const [isPanning, setIsPanning] = useState(false)
-  const [panStart, setPanStart] = useState({ x: 0, y: 0, panX: 0, panY: 0 })
+  
+  const isSpacePressedRef = useRef(false)
+  const panStateRef = useRef({
+    isPanning: false,
+    startX: 0,
+    startY: 0,
+    initialPanX: 0,
+    initialPanY: 0,
+  })
 
   const svgRef = useRef<SVGSVGElement>(null)
   const canvasRef = useRef<HTMLElement>(null)
@@ -121,33 +129,54 @@ function Canvas() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && !editingTextId) {
+      if ((e.code === 'Space' || e.key === ' ') && !editingTextId) {
         if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
         e.preventDefault()
-        setIsSpacePressed(true)
+        if (!isSpacePressedRef.current) {
+          isSpacePressedRef.current = true
+          setIsSpacePressed(true)
+        }
       }
     }
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
+      if (e.code === 'Space' || e.key === ' ') {
+        isSpacePressedRef.current = false
         setIsSpacePressed(false)
+        if (panStateRef.current.isPanning) {
+          panStateRef.current.isPanning = false
+          setIsPanning(false)
+        }
+      }
+    }
+    const handleBlur = () => {
+      isSpacePressedRef.current = false
+      setIsSpacePressed(false)
+      if (panStateRef.current.isPanning) {
+        panStateRef.current.isPanning = false
         setIsPanning(false)
       }
     }
+    
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
+    window.addEventListener('blur', handleBlur)
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('blur', handleBlur)
     }
   }, [editingTextId])
 
   useEffect(() => {
     const handlePointerUp = () => {
-      if (isPanning) setIsPanning(false)
+      if (panStateRef.current.isPanning) {
+        panStateRef.current.isPanning = false
+        setIsPanning(false)
+      }
     }
     window.addEventListener('pointerup', handlePointerUp)
     return () => window.removeEventListener('pointerup', handlePointerUp)
-  }, [isPanning])
+  }, [])
 
   const toSVGPoint = (e: React.MouseEvent<SVGSVGElement>) => {
     const svg = svgRef.current
@@ -161,9 +190,16 @@ function Canvas() {
   }
 
   const handleSVGMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (e.button === 1 || isSpacePressed) {
+    if (e.button === 1 || isSpacePressedRef.current) {
+      const currentViewport = useEditorStore.getState().viewport
+      panStateRef.current = {
+        isPanning: true,
+        startX: e.clientX,
+        startY: e.clientY,
+        initialPanX: currentViewport.panX,
+        initialPanY: currentViewport.panY,
+      }
       setIsPanning(true)
-      setPanStart({ x: e.clientX, y: e.clientY, panX: viewport.panX, panY: viewport.panY })
       return
     }
 
@@ -174,10 +210,11 @@ function Canvas() {
   }
 
   const handleSVGMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (isPanning) {
-      const dx = e.clientX - panStart.x
-      const dy = e.clientY - panStart.y
-      setViewport({ ...viewport, panX: panStart.panX + dx, panY: panStart.panY + dy })
+    if (panStateRef.current.isPanning) {
+      const dx = e.clientX - panStateRef.current.startX
+      const dy = e.clientY - panStateRef.current.startY
+      const currentViewport = useEditorStore.getState().viewport
+      setViewport({ ...currentViewport, panX: panStateRef.current.initialPanX + dx, panY: panStateRef.current.initialPanY + dy })
       return
     }
 
@@ -198,7 +235,8 @@ function Canvas() {
   }
 
   const handleSVGMouseUp = () => {
-    if (isPanning) {
+    if (panStateRef.current.isPanning) {
+      panStateRef.current.isPanning = false
       setIsPanning(false)
       return
     }
