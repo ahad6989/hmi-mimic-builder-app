@@ -28,7 +28,7 @@ describe('SVG Import and Store Integration Tests', () => {
         {
           id: 'rect-1',
           name: 'Main Box',
-          type: 'rectangle',
+          type: 'rect',
           visible: true,
           locked: false,
           transform: { x: 100, y: 150, width: 200, height: 100, rotation: 0 },
@@ -44,12 +44,14 @@ describe('SVG Import and Store Integration Tests', () => {
             strokeLineJoin: 'miter',
           },
           textStyle: {
+            content: '',
             fontFamily: 'sans-serif',
             fontSize: 16,
-            fontWeight: 400,
+            fontWeight: 'normal',
             fontStyle: 'normal',
             textDecoration: 'none',
-            textAlign: 'left',
+            color: '#000000',
+            backgroundColor: 'transparent',
           },
           rx: 10,
         },
@@ -72,12 +74,14 @@ describe('SVG Import and Store Integration Tests', () => {
             strokeLineJoin: 'bevel',
           },
           textStyle: {
+            content: '',
             fontFamily: 'sans-serif',
             fontSize: 16,
-            fontWeight: 400,
+            fontWeight: 'normal',
             fontStyle: 'normal',
             textDecoration: 'none',
-            textAlign: 'left',
+            color: '#000000',
+            backgroundColor: 'transparent',
           },
         },
         {
@@ -103,12 +107,14 @@ describe('SVG Import and Store Integration Tests', () => {
             strokeLineJoin: 'round',
           },
           textStyle: {
+            content: '',
             fontFamily: 'sans-serif',
             fontSize: 16,
-            fontWeight: 400,
+            fontWeight: 'normal',
             fontStyle: 'normal',
             textDecoration: 'none',
-            textAlign: 'left',
+            color: '#000000',
+            backgroundColor: 'transparent',
           },
         },
         {
@@ -118,7 +124,6 @@ describe('SVG Import and Store Integration Tests', () => {
           visible: true,
           locked: false,
           transform: { x: 120, y: 190, width: 160, height: 30, rotation: 0 },
-          text: 'Valve Status: OK',
           style: {
             fill: '#111111',
             fillOpacity: 1,
@@ -138,6 +143,7 @@ describe('SVG Import and Store Integration Tests', () => {
             fontWeight: 'bold',
             fontStyle: 'normal',
             textDecoration: 'none',
+            backgroundColor: 'transparent',
           },
         },
       ]
@@ -147,7 +153,7 @@ describe('SVG Import and Store Integration Tests', () => {
       expect(exportedSvg).toContain('<svg')
       expect(exportedSvg).toContain('Valve Status: OK')
       expect(exportedSvg).toContain('rect')
-      expect(exportedSvg).toContain('circle')
+      expect(exportedSvg).toContain('ellipse')
       expect(exportedSvg).toContain('line')
 
       // Step 2: Import the SVG
@@ -156,7 +162,7 @@ describe('SVG Import and Store Integration Tests', () => {
       expect(imported).toHaveLength(4)
 
       // Step 3: Verify imported elements preserve shape types, dimensions, colors, and styles
-      const importedRect = imported.find((el) => el.type === 'rectangle')
+      const importedRect = imported.find((el) => el.type === 'rect')
       expect(importedRect).toBeDefined()
       expect(importedRect!.transform.width).toBe(200)
       expect(importedRect!.transform.height).toBe(100)
@@ -181,7 +187,7 @@ describe('SVG Import and Store Integration Tests', () => {
 
       const importedText = imported.find((el) => el.type === 'text')
       expect(importedText).toBeDefined()
-      expect(importedText!.text).toBe('Valve Status: OK')
+      expect(importedText!.textStyle.content).toBe('Valve Status: OK')
       expect(importedText!.style.fill).toBe('#111111')
       expect(importedText!.textStyle.fontSize).toBe(18)
     })
@@ -219,7 +225,7 @@ describe('SVG Import and Store Integration Tests', () => {
         {
           id: 'imported-1',
           name: 'Box 1',
-          type: 'rectangle',
+          type: 'rect',
           visible: true,
           locked: false,
           transform: { x: 50, y: 50, width: 100, height: 100, rotation: 0 },
@@ -235,18 +241,20 @@ describe('SVG Import and Store Integration Tests', () => {
             strokeLineJoin: 'miter',
           },
           textStyle: {
+            content: '',
             fontFamily: 'sans-serif',
             fontSize: 14,
-            fontWeight: 400,
+            fontWeight: 'normal',
             fontStyle: 'normal',
             textDecoration: 'none',
-            textAlign: 'left',
+            color: '#000000',
+            backgroundColor: 'transparent',
           },
         },
         {
           id: 'imported-2',
           name: 'Box 2',
-          type: 'rectangle',
+          type: 'rect',
           visible: true,
           locked: false,
           transform: { x: 200, y: 50, width: 100, height: 100, rotation: 0 },
@@ -262,12 +270,14 @@ describe('SVG Import and Store Integration Tests', () => {
             strokeLineJoin: 'miter',
           },
           textStyle: {
+            content: '',
             fontFamily: 'sans-serif',
             fontSize: 14,
-            fontWeight: 400,
+            fontWeight: 'normal',
             fontStyle: 'normal',
             textDecoration: 'none',
-            textAlign: 'left',
+            color: '#000000',
+            backgroundColor: 'transparent',
           },
         },
       ]
@@ -303,7 +313,7 @@ describe('SVG Import and Store Integration Tests', () => {
       const preExistingElement: CanvasElement = {
         id: 'pre-existing',
         name: 'Background Base',
-        type: 'rectangle',
+        type: 'rect',
         visible: true,
         locked: false,
         transform: { x: 0, y: 0, width: 800, height: 600, rotation: 0 },
@@ -319,12 +329,14 @@ describe('SVG Import and Store Integration Tests', () => {
           strokeLineJoin: 'miter',
         },
         textStyle: {
+          content: '',
           fontFamily: 'sans-serif',
           fontSize: 14,
-          fontWeight: 400,
+          fontWeight: 'normal',
           fontStyle: 'normal',
           textDecoration: 'none',
-          textAlign: 'left',
+          color: '#000000',
+          backgroundColor: 'transparent',
         },
       }
 
@@ -353,12 +365,14 @@ describe('SVG Import and Store Integration Tests', () => {
           strokeLineJoin: 'miter',
         },
         textStyle: {
+          content: '',
           fontFamily: 'sans-serif',
           fontSize: 14,
-          fontWeight: 400,
+          fontWeight: 'normal',
           fontStyle: 'normal',
           textDecoration: 'none',
-          textAlign: 'left',
+          color: '#000000',
+          backgroundColor: 'transparent',
         },
       }
 
@@ -380,7 +394,7 @@ describe('SVG Import and Store Integration Tests', () => {
       const largeRect: CanvasElement = {
         id: 'large-1',
         name: 'Huge Canvas',
-        type: 'rectangle',
+        type: 'rect',
         visible: true,
         locked: false,
         transform: { x: 0, y: 0, width: 1600, height: 1200, rotation: 0 },
@@ -396,12 +410,14 @@ describe('SVG Import and Store Integration Tests', () => {
           strokeLineJoin: 'miter',
         },
         textStyle: {
+          content: '',
           fontFamily: 'sans-serif',
           fontSize: 14,
-          fontWeight: 400,
+          fontWeight: 'normal',
           fontStyle: 'normal',
           textDecoration: 'none',
-          textAlign: 'left',
+          color: '#000000',
+          backgroundColor: 'transparent',
         },
       }
 
@@ -419,7 +435,7 @@ describe('SVG Import and Store Integration Tests', () => {
       const smallRect: CanvasElement = {
         id: 'small-1',
         name: 'Small Box',
-        type: 'rectangle',
+        type: 'rect',
         visible: true,
         locked: false,
         transform: { x: 0, y: 0, width: 200, height: 100, rotation: 0 },
@@ -435,12 +451,14 @@ describe('SVG Import and Store Integration Tests', () => {
           strokeLineJoin: 'miter',
         },
         textStyle: {
+          content: '',
           fontFamily: 'sans-serif',
           fontSize: 14,
-          fontWeight: 400,
+          fontWeight: 'normal',
           fontStyle: 'normal',
           textDecoration: 'none',
-          textAlign: 'left',
+          color: '#000000',
+          backgroundColor: 'transparent',
         },
       }
 
