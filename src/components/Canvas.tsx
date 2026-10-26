@@ -5,13 +5,14 @@
 import { useCallback, useRef, useState, useEffect } from 'react'
 import { useEditorStore } from '../store/EditorStore'
 import { getElementBounds } from '../geometry/bounds'
-import { computeFocalZoom } from '../geometry/coordinates'
+import { computeFocalZoom, toSVGPoint, toWorldPoint } from '../geometry/coordinates'
 import { useSelectTool } from '../tools/useSelectTool'
 import { useRectTool } from '../tools/useRectTool'
 import { useEllipseTool } from '../tools/useEllipseTool'
 import { useLineTool } from '../tools/useLineTool'
 import { usePolylineTool } from '../tools/usePolylineTool'
 import { usePenTool } from '../tools/usePenTool'
+import { usePencilTool } from '../tools/usePencilTool'
 import { useResizeTool } from '../tools/useResizeTool'
 import { useRotateTool } from '../tools/useRotateTool'
 import { useTextTool } from '../tools/useTextTool'
@@ -23,42 +24,44 @@ import ShapeContextMenu from './ShapeContextMenu'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import TextEditOverlay from './TextEditOverlay'
 
-const CANVAS_WIDTH  = 800
+const CANVAS_WIDTH = 800
 const CANVAS_HEIGHT = 600
-const GRID_SIZE     = 20
+const GRID_SIZE = 20
 
 const TOOL_CURSORS: Record<string, string> = {
-  select:  'default',
-  rect:    'crosshair',
+  select: 'default',
+  pan: 'grab',
+  rect: 'crosshair',
   ellipse: 'crosshair',
-  line:    'crosshair',
+  line: 'crosshair',
   polyline: 'crosshair',
-  pen:     'crosshair',
-  text:    'text',
+  pen: 'crosshair',
+  pencil: 'crosshair',
+  text: 'text',
 }
 
 function Canvas() {
-  const activeTool         = useEditorStore((s) => s.activeTool)
-  const elements           = useEditorStore((s) => s.elements)
+  const activeTool = useEditorStore((s) => s.activeTool)
+  const elements = useEditorStore((s) => s.elements)
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds)
-  const setActiveTool      = useEditorStore((s) => s.setActiveTool)
-  const clearSelection     = useEditorStore((s) => s.clearSelection)
-  const selectElement       = useEditorStore((s) => s.selectElement)
-  const deleteElement       = useEditorStore((s) => s.deleteElement)
-  const bringToFront       = useEditorStore((s) => s.bringToFront)
-  const sendToBack         = useEditorStore((s) => s.sendToBack)
-  const bringForward       = useEditorStore((s) => s.bringForward)
-  const sendBackward       = useEditorStore((s) => s.sendBackward)
-  const undo               = useEditorStore((s) => s.undo)
-  const redo               = useEditorStore((s) => s.redo)
-  const editingTextId      = useEditorStore((s) => s.editingTextId)
-  const setEditingTextId   = useEditorStore((s) => s.setEditingTextId)
-  const viewport           = useEditorStore((s) => s.viewport)
-  const setViewport        = useEditorStore((s) => s.setViewport)
+  const setActiveTool = useEditorStore((s) => s.setActiveTool)
+  const clearSelection = useEditorStore((s) => s.clearSelection)
+  const selectElement = useEditorStore((s) => s.selectElement)
+  const deleteElement = useEditorStore((s) => s.deleteElement)
+  const bringToFront = useEditorStore((s) => s.bringToFront)
+  const sendToBack = useEditorStore((s) => s.sendToBack)
+  const bringForward = useEditorStore((s) => s.bringForward)
+  const sendBackward = useEditorStore((s) => s.sendBackward)
+  const undo = useEditorStore((s) => s.undo)
+  const redo = useEditorStore((s) => s.redo)
+  const editingTextId = useEditorStore((s) => s.editingTextId)
+  const setEditingTextId = useEditorStore((s) => s.setEditingTextId)
+  const viewport = useEditorStore((s) => s.viewport)
+  const setViewport = useEditorStore((s) => s.setViewport)
 
   const [isSpacePressed, setIsSpacePressed] = useState(false)
   const [isPanning, setIsPanning] = useState(false)
-  
+
   const isSpacePressedRef = useRef(false)
   const panStateRef = useRef({
     isPanning: false,
@@ -73,12 +76,13 @@ function Canvas() {
   const contextMenuRef = useRef<HTMLDivElement>(null)
   const [renderedElements, setRenderedElements] = useState<Record<string, SVGGraphicsElement | null>>({})
 
-  const selectTool = useSelectTool(svgRef)
+  const selectTool = useSelectTool(svgRef, renderedElements)
   const rectTool = useRectTool(svgRef)
   const ellipseTool = useEllipseTool(svgRef)
   const lineTool = useLineTool(svgRef)
   const polylineTool = usePolylineTool(svgRef)
   const penTool = usePenTool(svgRef)
+  const pencilTool = usePencilTool(svgRef)
   const resizeTool = useResizeTool(svgRef)
   const rotateTool = useRotateTool(svgRef)
   const textTool = useTextTool(svgRef)
@@ -106,6 +110,7 @@ function Canvas() {
     selectedElementIds,
     polylineTool,
     penTool,
+    pencilTool,
     setActiveTool,
     clearSelection,
     deleteElement,
@@ -156,7 +161,7 @@ function Canvas() {
         setIsPanning(false)
       }
     }
-    
+
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
     window.addEventListener('blur', handleBlur)
@@ -178,19 +183,25 @@ function Canvas() {
     return () => window.removeEventListener('pointerup', handlePointerUp)
   }, [])
 
-  const toSVGPoint = (e: React.MouseEvent<SVGSVGElement>) => {
-    const svg = svgRef.current
-    if (!svg) return { x: 0, y: 0 }
-    const pt  = svg.createSVGPoint()
-    pt.x = e.clientX
-    pt.y = e.clientY
-    const ctm = svg.getScreenCTM()
-    if (!ctm) return { x: 0, y: 0 }
-    return pt.matrixTransform(ctm.inverse())
+  // Finalise pointer gestures when the mouse is released OUTSIDE the SVG
+  // (e.g. a marquee, shape drag or pencil stroke that ends over the Inspector).
+  // The window listener runs AFTER the SVG's own handler (the React root is
+  // deeper in the tree), so any already-handled gesture sees a null ref/state
+  // and the second call is a harmless no-op.
+  const handleWindowMouseUp = () => {
+    selectTool.onMouseUp()
+    penTool.onMouseUp()
+    pencilTool.onMouseUp()
   }
+  useEffect(() => {
+    window.addEventListener('mouseup', handleWindowMouseUp)
+    return () => window.removeEventListener('mouseup', handleWindowMouseUp)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- callback identity kept stable on purpose
+  }, [selectTool.onMouseUp, penTool.onMouseUp, pencilTool.onMouseUp])
+
 
   const handleSVGMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (e.button === 1 || isSpacePressedRef.current) {
+    if (e.button === 1 || isSpacePressedRef.current || (activeTool === 'pan' && e.button === 0)) {
       const currentViewport = useEditorStore.getState().viewport
       panStateRef.current = {
         isPanning: true,
@@ -207,25 +218,36 @@ function Canvas() {
     if (activeTool === 'ellipse') ellipseTool.onMouseDown(e)
     if (activeTool === 'line') lineTool.onMouseDown(e)
     if (activeTool === 'pen') penTool.onMouseDown(e)
+    if (activeTool === 'pencil') pencilTool.onMouseDown(e)
+    // Select tool: pressing on EMPTY canvas starts a marquee selection.
+    // (Shape presses never reach here — shapes stopPropagation on mousedown.)
+    if (activeTool === 'select') selectTool.onCanvasMouseDown(e)
   }
 
   const handleSVGMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     if (panStateRef.current.isPanning) {
-      const dx = e.clientX - panStateRef.current.startX
-      const dy = e.clientY - panStateRef.current.startY
+      const ctm = svgRef.current?.getScreenCTM()
+      const scaleFactor = ctm ? ctm.a : 1
+      const dx = (e.clientX - panStateRef.current.startX) / scaleFactor
+      const dy = (e.clientY - panStateRef.current.startY) / scaleFactor
       const currentViewport = useEditorStore.getState().viewport
       setViewport({ ...currentViewport, panX: panStateRef.current.initialPanX + dx, panY: panStateRef.current.initialPanY + dy })
       return
     }
 
-    const pt = toSVGPoint(e)
-    setMousePosition({ x: Math.round(pt.x), y: Math.round(pt.y) })
+    const svg = svgRef.current
+    if (svg) {
+      const currentViewport = useEditorStore.getState().viewport
+      const pt = toWorldPoint(e.clientX, e.clientY, svg, currentViewport.zoom, currentViewport.panX, currentViewport.panY)
+      setMousePosition({ x: Math.round(pt.x), y: Math.round(pt.y) })
+    }
 
     if (activeTool === 'rect') rectTool.onMouseMove(e)
     if (activeTool === 'ellipse') ellipseTool.onMouseMove(e)
     if (activeTool === 'line') lineTool.onMouseMove(e)
     if (activeTool === 'polyline') polylineTool.onMouseMove(e)
     if (activeTool === 'pen') penTool.onMouseMove(e)
+    if (activeTool === 'pencil') pencilTool.onMouseMove(e)
 
     if (activeTool === 'select') {
       resizeTool.onMouseMove(e)
@@ -245,6 +267,7 @@ function Canvas() {
     if (activeTool === 'ellipse') ellipseTool.onMouseUp()
     if (activeTool === 'line') lineTool.onMouseUp()
     if (activeTool === 'pen') penTool.onMouseUp()
+    if (activeTool === 'pencil') pencilTool.onMouseUp()
 
     if (activeTool === 'select') {
       resizeTool.onMouseUp()
@@ -270,7 +293,12 @@ function Canvas() {
   const handleShapeContextMenu = (event: React.MouseEvent<SVGElement>, id: string) => {
     event.preventDefault()
     event.stopPropagation()
-    selectElement(id)
+    // Preserve an existing multi-selection when right-clicking one of its
+    // members (needed for group actions like delete / arrange).
+    const currentSelection = useEditorStore.getState().selectedElementIds
+    if (!currentSelection.includes(id)) {
+      selectElement(id)
+    }
 
     const canvas = canvasRef.current
     if (!canvas) return
@@ -294,24 +322,24 @@ function Canvas() {
 
       if (e.ctrlKey || e.metaKey) {
         // Pinch-to-zoom or Ctrl+Scroll = ZOOM
-        const rect = svg.getBoundingClientRect()
-        const mouseX = e.clientX - rect.left
-        const mouseY = e.clientY - rect.top
-        
+        const svgPt = toSVGPoint(e.clientX, e.clientY, svg)
+
         const newViewport = computeFocalZoom(
           currentViewport.zoom,
           currentViewport.panX,
           currentViewport.panY,
-          mouseX,
-          mouseY,
+          svgPt.x,
+          svgPt.y,
           e.deltaY
         )
         setViewport(newViewport)
       } else {
         // Two-finger trackpad scroll or standard mouse wheel = PAN
-        const dx = e.shiftKey && e.deltaX === 0 ? e.deltaY : e.deltaX
-        const dy = e.shiftKey && e.deltaX === 0 ? 0 : e.deltaY
-        
+        const ctm = svg.getScreenCTM()
+        const scaleFactor = ctm ? ctm.a : 1
+        const dx = (e.shiftKey && e.deltaX === 0 ? e.deltaY : e.deltaX) / scaleFactor
+        const dy = (e.shiftKey && e.deltaX === 0 ? 0 : e.deltaY) / scaleFactor
+
         setViewport({
           ...currentViewport,
           panX: currentViewport.panX - dx,
@@ -326,7 +354,7 @@ function Canvas() {
 
   const getCursor = () => {
     if (isPanning) return 'grabbing'
-    if (isSpacePressed) return 'grab'
+    if (isSpacePressed || activeTool === 'pan') return 'grab'
     return TOOL_CURSORS[activeTool] ?? 'default'
   }
 
@@ -360,7 +388,7 @@ function Canvas() {
             />
           </pattern>
         </defs>
-        
+
         <g transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}>
           <rect x="-50000" y="-50000" width="100000" height="100000" fill="url(#grid)" />
 
@@ -393,6 +421,22 @@ function Canvas() {
             renderedElements={renderedElements}
           />
 
+          {/* Marquee (rubber-band) selection rectangle — world space, so it
+              tracks zoom/pan; stroke width divided by zoom keeps it a constant
+              thickness on screen. */}
+          {selectTool.marquee && (
+            <rect
+              x={selectTool.marquee.x}
+              y={selectTool.marquee.y}
+              width={selectTool.marquee.width}
+              height={selectTool.marquee.height}
+              fill="rgba(37, 99, 235, 0.08)"
+              stroke="#2563eb"
+              strokeWidth={1.5 / viewport.zoom}
+              pointerEvents="none"
+            />
+          )}
+
           {activeTool === 'select' && !editingTextId && (
             <ResizeHandles
               element={selectedElement}
@@ -408,7 +452,59 @@ function Canvas() {
             lineTool={lineTool}
             polylineTool={polylineTool}
             penTool={penTool}
+            pencilTool={pencilTool}
           />
+
+          {/* ── Figma-style Smart Guides ──────────────────────────────────────
+              Rendered ABOVE artwork so they are always visible.
+              • World-space coordinates → correct at every zoom / pan level.
+              • strokeWidth divided by zoom keeps them ~1 CSS px on screen.
+              • pointerEvents="none" → guides never intercept mouse events.
+              • data-smart-guide attribute → exportSvg skips this entire group.
+          ─────────────────────────────────────────────────────────────────── */}
+          {selectTool.smartGuides && selectTool.smartGuides.length > 0 && (
+            <g
+              id="smart-guides-overlay"
+              pointerEvents="none"
+              data-smart-guide="true"
+            >
+              {selectTool.smartGuides.map((guide, i) => {
+                const GUIDE_PAD = 8 / viewport.zoom   // small overrun past object edges
+                const sw = 1 / viewport.zoom           // constant 1px screen width
+                if (guide.axis === 'x') {
+                  // Vertical guide line (constant X, spans Y from start to end)
+                  return (
+                    <line
+                      key={i}
+                      x1={guide.value}
+                      y1={guide.start - GUIDE_PAD}
+                      x2={guide.value}
+                      y2={guide.end + GUIDE_PAD}
+                      stroke="#e040fb"
+                      strokeWidth={sw}
+                      pointerEvents="none"
+                      data-smart-guide="true"
+                    />
+                  )
+                } else {
+                  // Horizontal guide line (constant Y, spans X from start to end)
+                  return (
+                    <line
+                      key={i}
+                      x1={guide.start - GUIDE_PAD}
+                      y1={guide.value}
+                      x2={guide.end + GUIDE_PAD}
+                      y2={guide.value}
+                      stroke="#e040fb"
+                      strokeWidth={sw}
+                      pointerEvents="none"
+                      data-smart-guide="true"
+                    />
+                  )
+                }
+              })}
+            </g>
+          )}
         </g>
 
       </svg>

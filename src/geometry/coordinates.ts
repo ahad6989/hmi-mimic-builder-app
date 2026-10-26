@@ -37,21 +37,49 @@ export const MAX_ZOOM = 10    // 1000%
  * We use Math.exp(-deltaY * ZOOM_SENSITIVITY) so that:
  *   - A mouse scroll wheel (deltaY ≈ 100) gives noticeable zoom per tick
  *   - A trackpad (deltaY ≈ 1–3) gives tiny smooth increments
-const ZOOM_SENSITIVITY = 0.015
+ */
+export const ZOOM_SENSITIVITY = 0.0025
 
 // ---------------------------------------------------------------------------
 // Core conversion
 // ---------------------------------------------------------------------------
 
 /**
+ * Convert a browser mouse event position (clientX, clientY) into SVG-relative coordinates.
+ * Uses svg.getScreenCTM() if available to correctly account for viewBox, aspect ratio,
+ * CSS sizing, and document positioning. Falls back to getBoundingClientRect() if CTM is unavailable.
+ */
+export function toSVGPoint(
+  clientX: number,
+  clientY: number,
+  svgEl: SVGSVGElement
+): { x: number; y: number } {
+  const ctm = svgEl.getScreenCTM?.()
+  if (ctm && typeof ctm.inverse === 'function') {
+    const pt = svgEl.createSVGPoint?.()
+    if (pt && typeof pt.matrixTransform === 'function') {
+      pt.x = clientX
+      pt.y = clientY
+      const transformed = pt.matrixTransform(ctm.inverse())
+      return { x: transformed.x, y: transformed.y }
+    }
+  }
+  const rect = svgEl.getBoundingClientRect?.() ?? { left: 0, top: 0 }
+  return {
+    x: clientX - rect.left,
+    y: clientY - rect.top,
+  }
+}
+
+/**
  * Convert a browser mouse event position (clientX, clientY) into world space.
  *
  * @param clientX   - event.clientX from the mouse event
  * @param clientY   - event.clientY from the mouse event
- * @param svgEl     - the <svg> DOM element (needed for its page position)
+ * @param svgEl     - the <svg> DOM element
  * @param zoom      - current viewport zoom (1.0 = 100%)
- * @param panX      - current viewport horizontal offset (screen pixels)
- * @param panY      - current viewport vertical offset (screen pixels)
+ * @param panX      - current viewport horizontal offset
+ * @param panY      - current viewport vertical offset
  */
 export function toWorldPoint(
   clientX: number,
@@ -61,23 +89,16 @@ export function toWorldPoint(
   panX: number,
   panY: number
 ): { x: number; y: number } {
-  // Step 1: get the SVG element's position on the page
-  const rect = svgEl.getBoundingClientRect()
-
-  // Step 2: convert from browser-absolute to SVG-relative pixels
-  const svgX = clientX - rect.left
-  const svgY = clientY - rect.top
-
-  // Step 3: apply the inverse viewport transform to get world coordinates
+  const svgPt = toSVGPoint(clientX, clientY, svgEl)
   return {
-    x: (svgX - panX) / zoom,
-    y: (svgY - panY) / zoom,
+    x: (svgPt.x - panX) / zoom,
+    y: (svgPt.y - panY) / zoom,
   }
 }
 
 /**
- * Convert a world-space point into browser client coordinates.
- * This is the exact inverse of toWorldPoint's manual viewport transform.
+ * Convert a world-space point into browser client coordinates (clientX, clientY).
+ * This is the exact inverse of toWorldPoint.
  */
 export function toScreenPoint(
   worldX: number,
@@ -87,10 +108,24 @@ export function toScreenPoint(
   panX: number,
   panY: number
 ): { x: number; y: number } {
-  const rect = svgEl.getBoundingClientRect()
+  const svgX = worldX * zoom + panX
+  const svgY = worldY * zoom + panY
+
+  const ctm = svgEl.getScreenCTM?.()
+  if (ctm) {
+    const pt = svgEl.createSVGPoint?.()
+    if (pt && typeof pt.matrixTransform === 'function') {
+      pt.x = svgX
+      pt.y = svgY
+      const transformed = pt.matrixTransform(ctm)
+      return { x: transformed.x, y: transformed.y }
+    }
+  }
+
+  const rect = svgEl.getBoundingClientRect?.() ?? { left: 0, top: 0 }
   return {
-    x: rect.left + worldX * zoom + panX,
-    y: rect.top + worldY * zoom + panY,
+    x: rect.left + svgX,
+    y: rect.top + svgY,
   }
 }
 

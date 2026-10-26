@@ -2,6 +2,7 @@ import { useCallback, useRef } from 'react'
 import { useEditorStore } from '../store/EditorStore'
 import { getElementBounds, type Bounds } from '../geometry/bounds'
 import type { CanvasElement } from '../types/canvas'
+import { toWorldPoint } from '../geometry/coordinates'
 
 const MIN_RESIZE_SIZE = 2
 
@@ -30,6 +31,7 @@ function cloneElement(element: CanvasElement): CanvasElement {
     points: element.points?.map((point) => ({
       ...point,
       ...(point.handleOut ? { handleOut: { ...point.handleOut } } : {}),
+      ...(point.handleIn ? { handleIn: { ...point.handleIn } } : {}),
     })),
   }
 }
@@ -70,7 +72,7 @@ function getAnchorPoint(bounds: Bounds, handle: ResizeHandle) {
  * so mouse coordinates in SVG space must be counter-rotated to match the
  * element's own transform.x / width / height values.
  */
-function toLocalPoint(
+export function toLocalPoint(
   point: { x: number; y: number },
   bounds: Bounds,
   rotation: number
@@ -86,8 +88,8 @@ function toLocalPoint(
   const dy = point.y - cy
 
   return {
-    x: dx * cos - dy * sin + cx,
-    y: dx * sin + dy * cos + cy,
+    x: dx * cos + dy * sin + cx,
+    y: -dx * sin + dy * cos + cy,
   }
 }
 
@@ -97,18 +99,12 @@ export function useResizeTool(
   const resizeElement = useEditorStore((state) => state.resizeElement)
   const dragRef = useRef<ResizeDrag | null>(null)
 
-  const toSVGPoint = useCallback(
+  const getPoint = useCallback(
     (clientX: number, clientY: number) => {
       const svg = svgRef.current
       if (!svg) return { x: 0, y: 0 }
-
-      const point = svg.createSVGPoint()
-      point.x = clientX
-      point.y = clientY
-      const ctm = svg.getScreenCTM()
-      if (!ctm) return { x: 0, y: 0 }
-
-      return point.matrixTransform(ctm.inverse())
+      const { zoom, panX, panY } = useEditorStore.getState().viewport
+      return toWorldPoint(clientX, clientY, svg, zoom, panX, panY)
     },
     [svgRef]
   )
@@ -136,7 +132,7 @@ export function useResizeTool(
       const drag = dragRef.current
       if (!drag) return
 
-      const point = toSVGPoint(e.clientX, e.clientY)
+      const point = getPoint(e.clientX, e.clientY)
       const localPoint = toLocalPoint(point, drag.bounds, drag.originalElement.transform.rotation ?? 0)
       const resizedBounds = getResizedBounds(drag.bounds, drag.handle, localPoint)
       const nextWidth = resizedBounds.right - resizedBounds.left
@@ -169,7 +165,7 @@ export function useResizeTool(
         drag.historyKey
       )
     },
-    [resizeElement, toSVGPoint]
+    [resizeElement, getPoint]
   )
 
   const onMouseUp = useCallback(() => {

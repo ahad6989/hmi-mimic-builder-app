@@ -15,6 +15,11 @@ interface KeyboardShortcutsOptions {
     cancel: () => void
     commit: () => void
   }
+  pencilTool: {
+    isDrawing: boolean
+    cancel: () => void
+    commit: () => void
+  }
   setActiveTool: (tool: Tool) => void
   clearSelection: () => void
   deleteElement: (id: string) => void
@@ -29,6 +34,7 @@ export function useKeyboardShortcuts({
   selectedElementIds,
   polylineTool,
   penTool,
+  pencilTool,
   setActiveTool,
   clearSelection,
   deleteElement,
@@ -38,7 +44,13 @@ export function useKeyboardShortcuts({
 }: KeyboardShortcutsOptions) {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target instanceof HTMLElement && e.target.isContentEditable)
+      ) {
+        return
+      }
       const isShortcut = e.ctrlKey || e.metaKey
       if (isShortcut && (e.key === 'z' || e.key === 'Z')) {
         e.preventDefault()
@@ -61,6 +73,8 @@ export function useKeyboardShortcuts({
             polylineTool.cancel()
           } else if (activeTool === 'pen' && penTool.isDrawing) {
             penTool.cancel()
+          } else if (activeTool === 'pencil' && pencilTool.isDrawing) {
+            pencilTool.cancel()
           } else {
             clearSelection()
           }
@@ -68,20 +82,28 @@ export function useKeyboardShortcuts({
         case 'Enter':
           if (activeTool === 'polyline') polylineTool.commit()
           if (activeTool === 'pen') penTool.commit()
+          if (activeTool === 'pencil') pencilTool.commit()
           break
         case 'Delete':
+        case 'Backspace':
           if (selectedElementIds.length > 0) {
+            e.preventDefault()
             selectedElementIds.forEach((id) => deleteElement(id))
             clearSelection()
           }
           break
         case 'v': case 'V': setActiveTool('select'); break
+        case 'h': case 'H': setActiveTool('pan'); break
         case 'r': case 'R': setActiveTool('rect'); break
+        case 'o': case 'O': setActiveTool('ellipse'); break
+        case 'l': case 'L': setActiveTool('line'); break
         case 'y': case 'Y': setActiveTool('polyline'); break
+        case 'p': case 'P': setActiveTool('pen'); break
+        case 'b': case 'B': setActiveTool('pencil'); break
         case 't': case 'T': setActiveTool('text'); break
       }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [activeTool, clearSelection, contextMenuOpen, deleteElement, penTool, polylineTool, redo, selectedElementIds, setActiveTool, setContextMenu, undo])
+  }, [activeTool, clearSelection, contextMenuOpen, deleteElement, pencilTool, penTool, polylineTool, redo, selectedElementIds, setActiveTool, setContextMenu, undo])
 }

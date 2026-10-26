@@ -58,6 +58,12 @@ export interface Viewport {
   panY: number
 }
 
+export interface SnapConfig {
+  snapToGrid: boolean
+  gridSize: 8 | 16
+  snapToObjects: boolean
+}
+
 // ---------------------------------------------------------------------------
 // State shape
 // ---------------------------------------------------------------------------
@@ -73,12 +79,15 @@ interface EditorState {
   future: CanvasElement[][]
 
   // ---- Selection ----
-  /** IDs of every currently selected element. Array supports multi-select later. */
+  /** IDs of every currently selected element. Array supports multi-select. */
   selectedElementIds: string[]
   editingTextId: string | null
 
   // ---- Viewport ----
   viewport: Viewport
+
+  // ---- Snapping ----
+  snapConfig: SnapConfig
 
   // ---- Actions ----
   setActiveTool: (tool: Tool) => void
@@ -94,9 +103,12 @@ interface EditorState {
 
   /**
    * Move a single element to a new (x, y) position.
-   * Only updates transform.x and transform.y — nothing else.
    */
   updateElementPosition: (id: string, x: number, y: number, historyKey?: string) => void
+  /**
+   * Move multiple elements atomically by (deltaX, deltaY) preserving relative distances.
+   */
+  moveElements: (ids: string[], deltaX: number, deltaY: number, historyKey?: string) => void
   resizeElement: (
     id: string,
     scaleX: number,
@@ -111,8 +123,12 @@ interface EditorState {
   redo: () => void
 
   selectElement: (id: string) => void
+  selectElements: (ids: string[]) => void
+  toggleSelectElement: (id: string) => void
   clearSelection: () => void
   setEditingTextId: (id: string | null) => void
+
+  setSnapConfig: (config: Partial<SnapConfig>) => void
 
   /**
    * Replace the entire viewport state in one atomic update.
@@ -137,8 +153,62 @@ export const useEditorStore = create<EditorState>((set) => {
     points: element.points?.map((point) => ({
       ...point,
       ...(point.handleOut ? { handleOut: { ...point.handleOut } } : {}),
+      ...(point.handleIn ? { handleIn: { ...point.handleIn } } : {}),
     })),
   }))
+
+  const moveElementByDelta = (el: CanvasElement, deltaX: number, deltaY: number): CanvasElement => {
+    const nextElement = {
+      ...el,
+      transform: {
+        ...el.transform,
+        x: el.transform.x + deltaX,
+        y: el.transform.y + deltaY,
+      },
+    }
+
+    if (el.type === 'line') {
+      return {
+        ...nextElement,
+        x1: (el.x1 ?? 0) + deltaX,
+        y1: (el.y1 ?? 0) + deltaY,
+        x2: (el.x2 ?? 0) + deltaX,
+        y2: (el.y2 ?? 0) + deltaY,
+      }
+    }
+
+    if (el.points) {
+      const points = el.points.map((point) => ({
+        ...point,
+        x: point.x + deltaX,
+        y: point.y + deltaY,
+        ...(point.handleOut
+          ? {
+              handleOut: {
+                x: point.handleOut.x + deltaX,
+                y: point.handleOut.y + deltaY,
+              },
+            }
+          : {}),
+        ...(point.handleIn
+          ? {
+              handleIn: {
+                x: point.handleIn.x + deltaX,
+                y: point.handleIn.y + deltaY,
+              },
+            }
+          : {}),
+      }))
+
+      return {
+        ...nextElement,
+        points,
+        ...(el.type === 'path' ? { pathData: buildPathData(points) } : {}),
+      }
+    }
+
+    return nextElement
+  }
 
   const pushHistory = (state: EditorState, historyKey?: string) => {
     if (historyKey && historyKey === activeHistoryKey) {
@@ -170,6 +240,13 @@ export const useEditorStore = create<EditorState>((set) => {
 
   // Initial viewport: 100% zoom, artboard offset 40px from canvas edges
   viewport: DEFAULT_VIEWPORT,
+
+  // Snapping settings
+  snapConfig: {
+    snapToGrid: false,
+    gridSize: 8,
+    snapToObjects: true,
+  },
 
   // ---- Tool actions ----
 
@@ -298,50 +375,31 @@ export const useEditorStore = create<EditorState>((set) => {
    */
   updateElementPosition: (id, x, y, historyKey) =>
     set((state) => {
+      const target = state.elements.find((el) => el.id === id)
+      if (!target) return state
+      const deltaX = x - target.transform.x
+      const deltaY = y - target.transform.y
+      if (deltaX === 0 && deltaY === 0) return state
+
       const history = pushHistory(state, historyKey)
       return {
         elements: state.elements.map((el) => {
-        if (el.id !== id) return el
+          if (el.id !== id) return el
+          return moveElementByDelta(el, deltaX, deltaY)
+        }),
+        ...history,
+      }
+    }),
 
-        const deltaX = x - el.transform.x
-        const deltaY = y - el.transform.y
-        const nextElement = {
-          ...el,
-          transform: { ...el.transform, x, y },
-        }
-
-        if (el.type === 'line') {
-          return {
-            ...nextElement,
-            x1: (el.x1 ?? 0) + deltaX,
-            y1: (el.y1 ?? 0) + deltaY,
-            x2: (el.x2 ?? 0) + deltaX,
-            y2: (el.y2 ?? 0) + deltaY,
-          }
-        }
-
-        if (el.points) {
-          const points = el.points.map((point) => ({
-            x: point.x + deltaX,
-            y: point.y + deltaY,
-            ...(point.handleOut
-              ? {
-                  handleOut: {
-                    x: point.handleOut.x + deltaX,
-                    y: point.handleOut.y + deltaY,
-                  },
-                }
-              : {}),
-          }))
-
-          return {
-            ...nextElement,
-            points,
-            ...(el.type === 'path' ? { pathData: buildPathData(points) } : {}),
-          }
-        }
-
-        return nextElement
+  moveElements: (ids, deltaX, deltaY, historyKey) =>
+    set((state) => {
+      if (ids.length === 0 || (deltaX === 0 && deltaY === 0)) return state
+      const idSet = new Set(ids)
+      const history = pushHistory(state, historyKey)
+      return {
+        elements: state.elements.map((el) => {
+          if (!idSet.has(el.id)) return el
+          return moveElementByDelta(el, deltaX, deltaY)
         }),
         ...history,
       }
@@ -384,6 +442,14 @@ export const useEditorStore = create<EditorState>((set) => {
                   handleOut: {
                     x: scalePoint(point.handleOut.x, anchorPoint.x, scaleX),
                     y: scalePoint(point.handleOut.y, anchorPoint.y, scaleY),
+                  },
+                }
+              : {}),
+            ...(point.handleIn
+              ? {
+                  handleIn: {
+                    x: scalePoint(point.handleIn.x, anchorPoint.x, scaleX),
+                    y: scalePoint(point.handleIn.y, anchorPoint.y, scaleY),
                   },
                 }
               : {}),
@@ -451,10 +517,29 @@ export const useEditorStore = create<EditorState>((set) => {
   /** Select exactly one element (replaces any existing selection). */
   selectElement: (id) => set({ selectedElementIds: [id] }),
 
+  /** Replace the selection with the given IDs (duplicates removed, order preserved). */
+  selectElements: (ids) =>
+    set({ selectedElementIds: [...new Set(ids.filter((id) => id !== ''))] }),
+
+  /**
+   * Shift-click behaviour: add the element to the selection if absent,
+   * remove it if already present. Toggling the last element empties the selection.
+   */
+  toggleSelectElement: (id) =>
+    set((state) => ({
+      selectedElementIds: state.selectedElementIds.includes(id)
+        ? state.selectedElementIds.filter((selectedId) => selectedId !== id)
+        : [...state.selectedElementIds, id],
+    })),
+
   /** Deselect everything. */
   clearSelection: () => set({ selectedElementIds: [] }),
 
   setEditingTextId: (id) => set({ editingTextId: id }),
+
+  /** Update snapping settings (partial merge). */
+  setSnapConfig: (config) =>
+    set((state) => ({ snapConfig: { ...state.snapConfig, ...config } })),
 
   /** Replace the entire viewport (zoom + pan) atomically. */
   setViewport: (viewport) => set({ viewport }),

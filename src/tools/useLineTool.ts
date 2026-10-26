@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react'
 import { useEditorStore } from '../store/EditorStore'
 import { createLineElement } from '../types/canvas'
+import { toWorldPoint } from '../geometry/coordinates'
+import { snapPoint } from '../geometry/snapping'
 
 const MIN_DRAW_SIZE = 2
 
@@ -19,18 +21,15 @@ export function useLineTool(
   const [isDrawing, setIsDrawing] = useState(false)
   const [drawStart, setDrawStart] = useState({ x: 0, y: 0 })
 
-  const toSVGPoint = useCallback(
+  const getPoint = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
       const svg = svgRef.current
       if (!svg) return { x: 0, y: 0 }
-
-      const point = svg.createSVGPoint()
-      point.x = e.clientX
-      point.y = e.clientY
-      const ctm = svg.getScreenCTM()
-      if (!ctm) return { x: 0, y: 0 }
-
-      return point.matrixTransform(ctm.inverse())
+      const state = useEditorStore.getState()
+      const { zoom, panX, panY } = state.viewport
+      const world = toWorldPoint(e.clientX, e.clientY, svg, zoom, panX, panY)
+      // Grid / object snapping (screen tolerance scaled by zoom).
+      return snapPoint(world, state.elements, state.snapConfig, zoom)
     },
     [svgRef]
   )
@@ -39,19 +38,19 @@ export function useLineTool(
     (e: React.MouseEvent<SVGSVGElement>) => {
       if (e.button !== 0) return
 
-      const point = toSVGPoint(e)
+      const point = getPoint(e)
       setDrawStart(point)
       setIsDrawing(true)
       setPreviewLine({ x1: point.x, y1: point.y, x2: point.x, y2: point.y })
     },
-    [toSVGPoint]
+    [getPoint]
   )
 
   const onMouseMove = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
       if (!isDrawing) return
 
-      const point = toSVGPoint(e)
+      const point = getPoint(e)
       setPreviewLine({
         x1: drawStart.x,
         y1: drawStart.y,
@@ -59,7 +58,7 @@ export function useLineTool(
         y2: point.y,
       })
     },
-    [drawStart, isDrawing, toSVGPoint]
+    [drawStart, isDrawing, getPoint]
   )
 
   const onMouseUp = useCallback(() => {

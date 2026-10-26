@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useEditorStore } from '../store/EditorStore'
 import { createPolylineElement } from '../types/canvas'
+import { toWorldPoint } from '../geometry/coordinates'
+import { snapPoint } from '../geometry/snapping'
 
 interface Point {
   x: number
@@ -16,18 +18,15 @@ export function usePolylineTool(
   const [previewPoint, setPreviewPoint] = useState<Point | null>(null)
   const [isDrawing, setIsDrawing] = useState(false)
 
-  const toSVGPoint = useCallback(
+  const getPoint = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
       const svg = svgRef.current
       if (!svg) return { x: 0, y: 0 }
-
-      const point = svg.createSVGPoint()
-      point.x = e.clientX
-      point.y = e.clientY
-      const ctm = svg.getScreenCTM()
-      if (!ctm) return { x: 0, y: 0 }
-
-      return point.matrixTransform(ctm.inverse())
+      const state = useEditorStore.getState()
+      const { zoom, panX, panY } = state.viewport
+      const world = toWorldPoint(e.clientX, e.clientY, svg, zoom, panX, panY)
+      // Grid / object snapping (screen tolerance scaled by zoom).
+      return snapPoint(world, state.elements, state.snapConfig, zoom)
     },
     [svgRef]
   )
@@ -59,26 +58,28 @@ export function usePolylineTool(
   }, [])
 
   useEffect(() => {
-    if (activeTool !== 'polyline' && isDrawing) cancel()
+    if (activeTool !== 'polyline' && isDrawing) {
+      queueMicrotask(() => cancel())
+    }
   }, [activeTool, cancel, isDrawing])
 
   const onCanvasClick = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
-      const point = toSVGPoint(e)
+      const point = getPoint(e)
       if (!isDrawing) {
         startDrawing(point)
         return
       }
       appendPoint(point)
     },
-    [appendPoint, isDrawing, startDrawing, toSVGPoint]
+    [appendPoint, isDrawing, startDrawing, getPoint]
   )
 
   const onMouseMove = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
-      if (isDrawing) setPreviewPoint(toSVGPoint(e))
+      if (isDrawing) setPreviewPoint(getPoint(e))
     },
-    [isDrawing, toSVGPoint]
+    [isDrawing, getPoint]
   )
 
   const onDoubleClick = useCallback(() => {

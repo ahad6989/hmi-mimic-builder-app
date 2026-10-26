@@ -119,10 +119,30 @@ function elementMarkup(element: CanvasElement): string {
         style,
       ].join(' ')} />`
 
-    case 'text':
-      return `<text ${[
+    case 'text': {
+      const content = element.textStyle.content ?? ''
+      const lines = content.split('\n')
+      const fontSize = element.textStyle.fontSize
+      const lineHeight = fontSize * 1.4
+      const firstBaselineY = transform.y - ((lines.length - 1) * lineHeight) / 2
+      const tspans = lines.length > 1
+        ? lines
+            .map((line, index) => `<tspan ${attribute('x', transform.x)} ${attribute('dy', index === 0 ? 0 : lineHeight)}>${escapeXml(line)}</tspan>`)
+            .join('')
+        : escapeXml(content)
+      const bgRect = element.textStyle.backgroundColor && element.textStyle.backgroundColor !== 'transparent'
+        ? `<rect ${[
+            attribute('x', bounds.x),
+            attribute('y', bounds.y),
+            attribute('width', bounds.width),
+            attribute('height', bounds.height),
+            attribute('fill', resolveColor(element.textStyle.backgroundColor)),
+          ].join(' ')} />\n  `
+        : ''
+      return `${bgRect}<text ${[
         attribute('x', transform.x),
-        attribute('y', transform.y),
+        attribute('y', firstBaselineY),
+        attribute('text-anchor', 'middle'),
         attribute('fill', resolveColor(element.textStyle.color)),
         attribute('font-family', element.textStyle.fontFamily),
         attribute('font-size', element.textStyle.fontSize),
@@ -130,7 +150,8 @@ function elementMarkup(element: CanvasElement): string {
         attribute('font-style', element.textStyle.fontStyle),
         attribute('text-decoration', element.textStyle.textDecoration),
         rotation,
-      ].join(' ')}>${escapeXml(element.textStyle.content)}</text>`
+      ].join(' ')}>${tspans}</text>`
+    }
 
     default:
       return ''
@@ -164,9 +185,11 @@ export function exportToPNG(
   elements: CanvasElement[],
   canvasWidth: number,
   canvasHeight: number,
-  backgroundColor?: string
+  backgroundColor?: string,
+  scale = 1
 ): Promise<Blob> {
-  return renderSVGToCanvas(elements, canvasWidth, canvasHeight, backgroundColor)
+  const bg = !backgroundColor || backgroundColor === 'transparent' ? undefined : backgroundColor
+  return renderSVGToCanvas(elements, canvasWidth, canvasHeight, bg, scale)
     .then((canvas) => canvasToBlob(canvas, 'image/png'))
 }
 
@@ -175,9 +198,10 @@ export function exportToJPEG(
   canvasWidth: number,
   canvasHeight: number,
   scale: number,
-  quality = 0.92
+  quality = 0.92,
+  backgroundColor = '#ffffff'
 ): Promise<Blob> {
-  return renderSVGToCanvas(elements, canvasWidth, canvasHeight, '#ffffff', scale)
+  return renderSVGToCanvas(elements, canvasWidth, canvasHeight, backgroundColor, scale)
     .then((canvas) => canvasToBlob(canvas, 'image/jpeg', quality))
 }
 

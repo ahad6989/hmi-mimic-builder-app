@@ -73,22 +73,36 @@ function TopBar({ isDarkMode, onToggleTheme }: TopBarProps) {
           </button>
           <div className="absolute top-full left-0 mt-1 hidden w-32 flex-col rounded-md border border-slate-200 bg-white p-1 shadow-lg group-hover:flex dark:border-slate-700 dark:bg-slate-800">
             <button
-              onClick={() => setViewport({ ...viewport, zoom: Math.min(10, viewport.zoom * 1.5) })}
+              onClick={() => {
+                const newZoom = Math.min(10, Math.max(0.1, viewport.zoom * 1.5))
+                const centerX = 400
+                const centerY = 300
+                const newPanX = centerX - (centerX - viewport.panX) * (newZoom / viewport.zoom)
+                const newPanY = centerY - (centerY - viewport.panY) * (newZoom / viewport.zoom)
+                setViewport({ zoom: newZoom, panX: newPanX, panY: newPanY })
+              }}
               className="flex w-full items-center px-2 py-1.5 text-left text-xs transition-colors hover:bg-slate-100 dark:hover:bg-slate-700"
             >
               Zoom In
             </button>
             <button
-              onClick={() => setViewport({ ...viewport, zoom: Math.max(0.1, viewport.zoom / 1.5) })}
+              onClick={() => {
+                const newZoom = Math.min(10, Math.max(0.1, viewport.zoom / 1.5))
+                const centerX = 400
+                const centerY = 300
+                const newPanX = centerX - (centerX - viewport.panX) * (newZoom / viewport.zoom)
+                const newPanY = centerY - (centerY - viewport.panY) * (newZoom / viewport.zoom)
+                setViewport({ zoom: newZoom, panX: newPanX, panY: newPanY })
+              }}
               className="flex w-full items-center px-2 py-1.5 text-left text-xs transition-colors hover:bg-slate-100 dark:hover:bg-slate-700"
             >
               Zoom Out
             </button>
             <button
-              onClick={() => setViewport({ ...viewport, zoom: 1 })}
+              onClick={() => setViewport({ zoom: 1, panX: 40, panY: 40 })}
               className="flex w-full items-center px-2 py-1.5 text-left text-xs transition-colors hover:bg-slate-100 dark:hover:bg-slate-700"
             >
-              Zoom to 100%
+              Reset 100%
             </button>
           </div>
         </div>

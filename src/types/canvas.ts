@@ -12,11 +12,13 @@
 /** Every tool the user can pick from the ToolDock. */
 export type Tool =
   | 'select'
+  | 'pan'
   | 'rect'
   | 'ellipse'
   | 'line'
   | 'polyline'
   | 'pen'
+  | 'pencil'
   | 'text'
 
 // ---------------------------------------------------------------------------
@@ -81,7 +83,13 @@ export interface TransformAttributes {
 export interface PathPoint {
   x: number
   y: number
+  /** Outgoing cubic control point (world coordinates). Shapes the NEXT segment. */
   handleOut?: {
+    x: number
+    y: number
+  }
+  /** Incoming cubic control point (world coordinates). Shapes the PREVIOUS segment. */
+  handleIn?: {
     x: number
     y: number
   }
@@ -276,9 +284,18 @@ export function buildPathData(points: PathPoint[]): string {
       if (index === 0) return `M ${point.x} ${point.y}`
 
       const previousPoint = points[index - 1]
-      if (!previousPoint.handleOut) return `L ${point.x} ${point.y}`
+      const controlOut = previousPoint.handleOut
+      const controlIn = point.handleIn
 
-      return `C ${previousPoint.handleOut.x} ${previousPoint.handleOut.y} ${point.x} ${point.y} ${point.x} ${point.y}`
+      // Full cubic segment: previous anchor's outgoing handle → this anchor's incoming handle.
+      if (controlOut && controlIn) {
+        return `C ${controlOut.x} ${controlOut.y} ${controlIn.x} ${controlIn.y} ${point.x} ${point.y}`
+      }
+      // Legacy single-handle data (pre-handleIn paths): degenerate cubic to the anchor.
+      if (controlOut) {
+        return `C ${controlOut.x} ${controlOut.y} ${point.x} ${point.y} ${point.x} ${point.y}`
+      }
+      return `L ${point.x} ${point.y}`
     })
     .join(' ')
 }
@@ -290,6 +307,7 @@ export function createPathElement(
     x: point.x,
     y: point.y,
     ...(point.handleOut ? { handleOut: { ...point.handleOut } } : {}),
+    ...(point.handleIn ? { handleIn: { ...point.handleIn } } : {}),
   }))
   const xValues = copiedPoints.map((point) => point.x)
   const yValues = copiedPoints.map((point) => point.y)

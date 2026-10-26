@@ -3,6 +3,7 @@ import type { RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { useEditorStore } from '../store/EditorStore'
 import type { CanvasElement } from '../types/canvas'
+import { toScreenPoint } from '../geometry/coordinates'
 
 const MIN_WIDTH = 20
 const MIN_HEIGHT = 24
@@ -25,6 +26,7 @@ interface TextEditOverlayProps {
 function TextEditOverlay({ element, svgRef }: TextEditOverlayProps) {
   const updateElement = useEditorStore((state) => state.updateElement)
   const setEditingTextId = useEditorStore((state) => state.setEditingTextId)
+  const viewport = useEditorStore((state) => state.viewport)
   const editableRef = useRef<HTMLDivElement>(null)
   const hasCommittedRef = useRef(false)
   const hasFocusedRef = useRef(false)
@@ -68,7 +70,6 @@ function TextEditOverlay({ element, svgRef }: TextEditOverlayProps) {
     if (!position || hasMeasuredRef.current || !editableRef.current) return
     hasMeasuredRef.current = true
     measure()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [position])
 
   // Focus once, caret at the end of existing text.
@@ -86,18 +87,19 @@ function TextEditOverlay({ element, svgRef }: TextEditOverlayProps) {
     const svg = svgRef.current
     if (!svg) { setPosition(null); return }
 
-    const pt = svg.createSVGPoint()
-    pt.x = element.transform.x
-    pt.y = element.transform.y
-    const ctm = svg.getScreenCTM()
-    if (!ctm) { setPosition(null); return }
-
-    const screenPoint = pt.matrixTransform(ctm)
+    const screenPoint = toScreenPoint(
+      element.transform.x,
+      element.transform.y,
+      svg,
+      viewport.zoom,
+      viewport.panX,
+      viewport.panY
+    )
     setPosition({
       left: screenPoint.x - size.width / 2,
       top: screenPoint.y - size.height / 2,
     })
-  }, [size, scale, element.transform.x, element.transform.y, svgRef])
+  }, [size, scale, element.transform.x, element.transform.y, svgRef, viewport.zoom, viewport.panX, viewport.panY])
 
   const commit = () => {
     if (hasCommittedRef.current) return
@@ -113,7 +115,7 @@ function TextEditOverlay({ element, svgRef }: TextEditOverlayProps) {
 
   // Scale SVG user-unit font size → CSS px so the overlay text matches the
   // size of the committed SVG text at whatever zoom the canvas is at.
-  const scaledFontSize = textStyle.fontSize * scale
+  const scaledFontSize = textStyle.fontSize * scale * viewport.zoom
 
   return createPortal(
     <div

@@ -53,7 +53,12 @@ function ShapeRenderer({ element, activeTool, renderedElement, onTextRef, onElem
           stroke={element.style.stroke}
           strokeWidth={element.style.strokeWidth}
           opacity={element.style.opacity ?? 1}
+          strokeOpacity={element.style.strokeOpacity}
+          strokeDasharray={element.style.strokeDashArray}
+          strokeLinecap={element.style.strokeLineCap}
+          strokeLinejoin={element.style.strokeLineJoin}
           rx={element.rx}
+          ry={element.ry}
           {...sharedProps}
         />
       </g>
@@ -73,6 +78,10 @@ function ShapeRenderer({ element, activeTool, renderedElement, onTextRef, onElem
           stroke={element.style.stroke}
           strokeWidth={element.style.strokeWidth}
           opacity={element.style.opacity ?? 1}
+          strokeOpacity={element.style.strokeOpacity}
+          strokeDasharray={element.style.strokeDashArray}
+          strokeLinecap={element.style.strokeLineCap}
+          strokeLinejoin={element.style.strokeLineJoin}
           {...sharedProps}
         />
       </g>

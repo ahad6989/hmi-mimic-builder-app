@@ -288,6 +288,9 @@ function Inspector() {
         ...(point.handleOut
           ? { handleOut: { ...point.handleOut, [axis]: point.handleOut[axis] + delta } }
           : {}),
+        ...(point.handleIn
+          ? { handleIn: { ...point.handleIn, [axis]: point.handleIn[axis] + delta } }
+          : {}),
       }))
       updateElement(element.id, {
         points,
@@ -303,31 +306,61 @@ function Inspector() {
   const renderPositionFields = (element: CanvasElement) => {
     const bounds = getElementBounds(element)
     return (
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         <NumberField fieldKey={`${element.id}-x`} label="X" value={bounds.x} onCommit={(value) => updatePosition(element, 'x', value)} />
         <NumberField fieldKey={`${element.id}-y`} label="Y" value={bounds.y} onCommit={(value) => updatePosition(element, 'y', value)} />
+        <NumberField
+          fieldKey={`${element.id}-rotation`}
+          label="Rot"
+          value={Math.round(element.transform.rotation ?? 0)}
+          onCommit={(value) => {
+            const normalized = ((value % 360) + 360) % 360
+            useEditorStore.getState().rotateElement(element.id, normalized)
+          }}
+        />
       </div>
     )
   }
 
   const renderDimensionFields = (element: CanvasElement) => {
     const bounds = getElementBounds(element)
-    const editable = element.type === 'rect' || element.type === 'ellipse'
+    const isText = element.type === 'text'
+
+    const handleWidthCommit = (newWidth: number) => {
+      const targetW = Math.max(1, newWidth)
+      if (element.type === 'rect' || element.type === 'ellipse') {
+        updateTransform(element, { width: targetW })
+      } else if (bounds.width > 0) {
+        const scaleX = targetW / bounds.width
+        useEditorStore.getState().resizeElement(element.id, scaleX, 1, { x: bounds.x, y: bounds.y }, element)
+      }
+    }
+
+    const handleHeightCommit = (newHeight: number) => {
+      const targetH = Math.max(1, newHeight)
+      if (element.type === 'rect' || element.type === 'ellipse') {
+        updateTransform(element, { height: targetH })
+      } else if (bounds.height > 0) {
+        const scaleY = targetH / bounds.height
+        useEditorStore.getState().resizeElement(element.id, 1, scaleY, { x: bounds.x, y: bounds.y }, element)
+      }
+    }
+
     return (
       <div className="grid grid-cols-2 gap-2">
         <NumberField
           fieldKey={`${element.id}-width`}
           label="W"
           value={bounds.width}
-          readOnly={!editable}
-          onCommit={(value) => updateTransform(element, { width: Math.max(0, value) })}
+          readOnly={isText}
+          onCommit={handleWidthCommit}
         />
         <NumberField
           fieldKey={`${element.id}-height`}
           label="H"
           value={bounds.height}
-          readOnly={!editable}
-          onCommit={(value) => updateTransform(element, { height: Math.max(0, value) })}
+          readOnly={isText}
+          onCommit={handleHeightCommit}
         />
       </div>
     )
@@ -467,13 +500,33 @@ function Inspector() {
           )}
 
           <Section title="Fill">
-            <ColorField
-              label="Fill"
-              value={selectedElement.style.fill}
-              opacity={selectedElement.style.fillOpacity}
-              onColorCommit={(value, historyKey) => updateStyle(selectedElement, { fill: value }, historyKey)}
-              onOpacityCommit={(value) => updateStyle(selectedElement, { fillOpacity: value })}
-            />
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs text-slate-500 dark:text-slate-400">Fill Mode</span>
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={selectedElement.style.fill === 'none'}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      updateStyle(selectedElement, { fill: 'none' })
+                    } else {
+                      updateStyle(selectedElement, { fill: '#3b82f6' })
+                    }
+                  }}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                No Fill
+              </label>
+            </div>
+            {selectedElement.style.fill !== 'none' && (
+              <ColorField
+                label="Fill"
+                value={selectedElement.style.fill}
+                opacity={selectedElement.style.fillOpacity}
+                onColorCommit={(value, historyKey) => updateStyle(selectedElement, { fill: value }, historyKey)}
+                onOpacityCommit={(value) => updateStyle(selectedElement, { fillOpacity: value })}
+              />
+            )}
           </Section>
 
           <Section title="Stroke">
@@ -492,6 +545,47 @@ function Inspector() {
                 strokeWidth: Math.max(0, value),
               })}
             />
+            <div className="grid grid-cols-3 gap-2">
+              <label className="block text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                Dash
+                <select
+                  value={selectedElement.style.strokeDashArray || ''}
+                  onChange={(e) => updateStyle(selectedElement, { strokeDashArray: e.target.value })}
+                  className="mt-1 block h-8 w-full rounded border border-slate-300 bg-slate-100 px-1 text-xs text-slate-700 outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                >
+                  <option value="">Solid</option>
+                  <option value="6 4">Dashed</option>
+                  <option value="2 4">Dotted</option>
+                  <option value="12 6">Long Dash</option>
+                </select>
+              </label>
+
+              <label className="block text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                Cap
+                <select
+                  value={selectedElement.style.strokeLineCap || 'butt'}
+                  onChange={(e) => updateStyle(selectedElement, { strokeLineCap: e.target.value as 'butt' | 'round' | 'square' })}
+                  className="mt-1 block h-8 w-full rounded border border-slate-300 bg-slate-100 px-1 text-xs text-slate-700 outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                >
+                  <option value="butt">Butt</option>
+                  <option value="round">Round</option>
+                  <option value="square">Square</option>
+                </select>
+              </label>
+
+              <label className="block text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                Join
+                <select
+                  value={selectedElement.style.strokeLineJoin || 'miter'}
+                  onChange={(e) => updateStyle(selectedElement, { strokeLineJoin: e.target.value as 'miter' | 'round' | 'bevel' })}
+                  className="mt-1 block h-8 w-full rounded border border-slate-300 bg-slate-100 px-1 text-xs text-slate-700 outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                >
+                  <option value="miter">Miter</option>
+                  <option value="round">Round</option>
+                  <option value="bevel">Bevel</option>
+                </select>
+              </label>
+            </div>
           </Section>
 
           {(selectedElement.type === 'polyline' || selectedElement.type === 'path') && (

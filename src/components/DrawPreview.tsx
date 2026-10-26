@@ -1,4 +1,6 @@
 import type { PathPoint } from '../types/canvas'
+import { buildPathData } from '../types/canvas'
+import { smoothPointStream } from '../geometry/smoothing'
 
 interface DrawPreviewProps {
   rectTool: {
@@ -20,13 +22,15 @@ interface DrawPreviewProps {
     points: PathPoint[]
     previewPoint: PathPoint | null
   }
+  pencilTool: {
+    isDrawing: boolean
+    points: Array<{ x: number; y: number }>
+  }
 }
 
 function buildPenPreviewPath(
   points: PathPoint[],
-  previewPoint: PathPoint | null,
-  activeHandleIndex: number | null,
-  activeHandlePoint: PathPoint | null
+  previewPoint: PathPoint | null
 ) {
   if (points.length === 0) return ''
 
@@ -36,20 +40,21 @@ function buildPenPreviewPath(
       if (index === 0) return `M ${point.x} ${point.y}`
 
       const previousPoint = previewPoints[index - 1]
-      const isActiveIncomingPreview = index === activeHandleIndex && activeHandlePoint
-      const incomingControl = isActiveIncomingPreview ? activeHandlePoint : point
+      const controlOut = previousPoint.handleOut
+      const controlIn = point.handleIn
 
-      if (!previousPoint.handleOut && !isActiveIncomingPreview) {
-        return `L ${point.x} ${point.y}`
+      if (controlOut && controlIn) {
+        return `C ${controlOut.x} ${controlOut.y} ${controlIn.x} ${controlIn.y} ${point.x} ${point.y}`
       }
-
-      const outgoingControl = previousPoint.handleOut ?? previousPoint
-      return `C ${outgoingControl.x} ${outgoingControl.y} ${incomingControl.x} ${incomingControl.y} ${point.x} ${point.y}`
+      if (controlOut) {
+        return `C ${controlOut.x} ${controlOut.y} ${point.x} ${point.y} ${point.x} ${point.y}`
+      }
+      return `L ${point.x} ${point.y}`
     })
     .join(' ')
 }
 
-function DrawPreview({ rectTool, ellipseTool, lineTool, polylineTool, penTool }: DrawPreviewProps) {
+function DrawPreview({ rectTool, ellipseTool, lineTool, polylineTool, penTool, pencilTool }: DrawPreviewProps) {
   return (
     <>
       {rectTool.previewRect && (
@@ -123,13 +128,14 @@ function DrawPreview({ rectTool, ellipseTool, lineTool, polylineTool, penTool }:
       {penTool.isDrawing && penTool.points.length > 0 && (
         <>
           <path
-            d={buildPenPreviewPath(penTool.points, penTool.previewPoint, null, null)}
+            d={buildPenPreviewPath(penTool.points, penTool.previewPoint)}
             fill="none"
             stroke="var(--canvas-preview-stroke)"
             strokeWidth="1.5"
             strokeDasharray="5 5"
             pointerEvents="none"
           />
+          {/* Rubber-band segment from the last anchor to the cursor */}
           {penTool.previewPoint && (
             <line
               x1={penTool.points[penTool.points.length - 1].x}
@@ -142,7 +148,52 @@ function DrawPreview({ rectTool, ellipseTool, lineTool, polylineTool, penTool }:
               pointerEvents="none"
             />
           )}
+          {/* Anchor points */}
+          {penTool.points.map((point, index) => (
+            <circle
+              key={`anchor-${index}`}
+              cx={point.x}
+              cy={point.y}
+              r={3}
+              fill="#2563eb"
+              pointerEvents="none"
+            />
+          ))}
+          {/* Tangent handles (control points) with their connector lines */}
+          {penTool.points.map((point, index) =>
+            (
+              [
+                ...(point.handleIn ? [{ handle: point.handleIn, key: `in-${index}` }] : []),
+                ...(point.handleOut ? [{ handle: point.handleOut, key: `out-${index}` }] : []),
+              ]
+            ).map(({ handle, key }) => (
+              <g key={key} pointerEvents="none">
+                <line
+                  x1={point.x}
+                  y1={point.y}
+                  x2={handle.x}
+                  y2={handle.y}
+                  stroke="#2563eb"
+                  strokeWidth="1"
+                />
+                <circle cx={handle.x} cy={handle.y} r={3} fill="#ffffff" stroke="#2563eb" strokeWidth="1.5" />
+              </g>
+            ))
+          )}
         </>
+      )}
+
+      {/* Pencil: the smoothed stroke exactly as it will be committed. */}
+      {pencilTool.isDrawing && pencilTool.points.length > 1 && (
+        <path
+          d={buildPathData(smoothPointStream(pencilTool.points))}
+          fill="none"
+          stroke="var(--canvas-preview-stroke)"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          pointerEvents="none"
+        />
       )}
     </>
   )

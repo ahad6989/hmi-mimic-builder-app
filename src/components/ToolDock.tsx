@@ -15,9 +15,11 @@
 import {
   Circle,
   CircleDot,
+  Hand,
   Minus,
   MousePointer2,
   PenTool,
+  Pencil,
   Square,
   Type,
   type LucideIcon,
@@ -41,11 +43,13 @@ interface ToolConfig {
 
 const TOOLS: ToolConfig[] = [
   { tool: 'select', icon: MousePointer2, shortcut: 'V', title: 'Select (V)' },
+  { tool: 'pan', icon: Hand, shortcut: 'H', title: 'Pan (H)' },
   { tool: 'rect', icon: Square, shortcut: 'R', title: 'Rectangle (R)' },
   { tool: 'ellipse', icon: Circle, shortcut: 'O', title: 'Ellipse (O)' },
   { tool: 'line', icon: Minus, shortcut: 'L', title: 'Line (L)' },
   { tool: 'polyline', icon: CircleDot, shortcut: 'Y', title: 'Polyline (Y)' },
   { tool: 'pen', icon: PenTool, shortcut: 'P', title: 'Pen (P)' },
+  { tool: 'pencil', icon: Pencil, shortcut: 'B', title: 'Pencil (B)' },
   { tool: 'text', icon: Type, shortcut: 'T', title: 'Text (T)' },
 ]
 

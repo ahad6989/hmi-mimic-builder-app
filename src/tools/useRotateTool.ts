@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react'
 import { useEditorStore } from '../store/EditorStore'
 import type { Bounds } from '../geometry/bounds'
+import { toWorldPoint } from '../geometry/coordinates'
 
 interface RotationDrag {
   elementId: string
@@ -12,18 +13,12 @@ export function useRotateTool(svgRef: React.RefObject<SVGSVGElement | null>) {
   const rotateElement = useEditorStore((state) => state.rotateElement)
   const dragRef = useRef<RotationDrag | null>(null)
 
-  const toSVGPoint = useCallback(
+  const getPoint = useCallback(
     (clientX: number, clientY: number) => {
       const svg = svgRef.current
       if (!svg) return { x: 0, y: 0 }
-
-      const point = svg.createSVGPoint()
-      point.x = clientX
-      point.y = clientY
-      const ctm = svg.getScreenCTM()
-      if (!ctm) return { x: 0, y: 0 }
-
-      return point.matrixTransform(ctm.inverse())
+      const { zoom, panX, panY } = useEditorStore.getState().viewport
+      return toWorldPoint(clientX, clientY, svg, zoom, panX, panY)
     },
     [svgRef]
   )
@@ -49,7 +44,7 @@ export function useRotateTool(svgRef: React.RefObject<SVGSVGElement | null>) {
       const drag = dragRef.current
       if (!drag) return
 
-      const point = toSVGPoint(event.clientX, event.clientY)
+      const point = getPoint(event.clientX, event.clientY)
       let rotation = Math.atan2(
         point.y - drag.center.y,
         point.x - drag.center.x
@@ -58,7 +53,7 @@ export function useRotateTool(svgRef: React.RefObject<SVGSVGElement | null>) {
       if (event.shiftKey) rotation = Math.round(rotation / 15) * 15
       rotateElement(drag.elementId, rotation, drag.historyKey)
     },
-    [rotateElement, toSVGPoint]
+    [rotateElement, getPoint]
   )
 
   const onMouseUp = useCallback(() => {

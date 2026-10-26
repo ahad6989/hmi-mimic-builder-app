@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react'
 import { useEditorStore } from '../store/EditorStore'
 import { createRectElement } from '../types/canvas'
+import { toWorldPoint } from '../geometry/coordinates'
+import { snapPoint } from '../geometry/snapping'
 
 const MIN_DRAW_SIZE = 2
 
@@ -19,18 +21,15 @@ export function useRectTool(
   const [isDrawing, setIsDrawing] = useState(false)
   const [drawStart, setDrawStart] = useState({ x: 0, y: 0 })
 
-  const toSVGPoint = useCallback(
+  const getPoint = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
       const svg = svgRef.current
       if (!svg) return { x: 0, y: 0 }
-
-      const point = svg.createSVGPoint()
-      point.x = e.clientX
-      point.y = e.clientY
-      const ctm = svg.getScreenCTM()
-      if (!ctm) return { x: 0, y: 0 }
-
-      return point.matrixTransform(ctm.inverse())
+      const state = useEditorStore.getState()
+      const { zoom, panX, panY } = state.viewport
+      const world = toWorldPoint(e.clientX, e.clientY, svg, zoom, panX, panY)
+      // Grid / object snapping (screen tolerance scaled by zoom).
+      return snapPoint(world, state.elements, state.snapConfig, zoom)
     },
     [svgRef]
   )
@@ -39,26 +38,37 @@ export function useRectTool(
     (e: React.MouseEvent<SVGSVGElement>) => {
       if (e.button !== 0) return
 
-      const point = toSVGPoint(e)
+      const point = getPoint(e)
       setDrawStart(point)
       setIsDrawing(true)
       setPreviewRect({ x: point.x, y: point.y, width: 0, height: 0 })
     },
-    [toSVGPoint]
+    [getPoint]
   )
 
   const onMouseMove = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
       if (!isDrawing) return
 
-      const point = toSVGPoint(e)
+      const point = getPoint(e)
+      let width = Math.abs(point.x - drawStart.x)
+      let height = Math.abs(point.y - drawStart.y)
+
+      if (e.shiftKey) {
+        const side = Math.max(width, height)
+        width = side
+        height = side
+        const x = point.x >= drawStart.x ? drawStart.x : drawStart.x - side
+        const y = point.y >= drawStart.y ? drawStart.y : drawStart.y - side
+        setPreviewRect({ x, y, width, height })
+        return
+      }
+
       const x = Math.min(drawStart.x, point.x)
       const y = Math.min(drawStart.y, point.y)
-      const width = Math.abs(point.x - drawStart.x)
-      const height = Math.abs(point.y - drawStart.y)
       setPreviewRect({ x, y, width, height })
     },
-    [drawStart, isDrawing, toSVGPoint]
+    [drawStart, isDrawing, getPoint]
   )
 
   const onMouseUp = useCallback(() => {

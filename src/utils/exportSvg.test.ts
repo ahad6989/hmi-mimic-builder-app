@@ -115,7 +115,7 @@ describe('exportSvg — CSS variable resolution', () => {
       onerror: null as (() => void) | null,
       privateSrc: '',
     }
-    vi.stubGlobal('Image', function () { return mockImageInstance } as unknown as Image)
+    vi.stubGlobal('Image', function () { return mockImageInstance } as unknown as typeof Image)
     Object.defineProperty(mockImageInstance, 'src', {
       get: () => mockImageInstance.privateSrc,
       set: (value: string) => {

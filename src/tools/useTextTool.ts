@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { useEditorStore } from '../store/EditorStore'
 import { createTextElement } from '../types/canvas'
+import { toWorldPoint } from '../geometry/coordinates'
 
 export function useTextTool(svgRef: React.RefObject<SVGSVGElement | null>) {
   const addElement = useEditorStore((state) => state.addElement)
@@ -8,16 +9,12 @@ export function useTextTool(svgRef: React.RefObject<SVGSVGElement | null>) {
   const setEditingTextId = useEditorStore((state) => state.setEditingTextId)
   const elements = useEditorStore((state) => state.elements)
 
-  const toSVGPoint = useCallback(
+  const getPoint = useCallback(
     (event: React.MouseEvent<SVGSVGElement>) => {
       const svg = svgRef.current
       if (!svg) return { x: 0, y: 0 }
-      const pt = svg.createSVGPoint()
-      pt.x = event.clientX
-      pt.y = event.clientY
-      const ctm = svg.getScreenCTM()
-      if (!ctm) return { x: 0, y: 0 }
-      return pt.matrixTransform(ctm.inverse())
+      const { zoom, panX, panY } = useEditorStore.getState().viewport
+      return toWorldPoint(event.clientX, event.clientY, svg, zoom, panX, panY)
     },
     [svgRef]
   )
@@ -39,13 +36,13 @@ export function useTextTool(svgRef: React.RefObject<SVGSVGElement | null>) {
         return
       }
 
-      const point = toSVGPoint(event)
+      const point = getPoint(event)
       const element = createTextElement(point.x, point.y)
       addElement(element)
       selectElement(element.id)
       setEditingTextId(element.id)
     },
-    [addElement, selectElement, setEditingTextId, toSVGPoint, elements]
+    [addElement, selectElement, setEditingTextId, getPoint, elements]
   )
 
   return { onCanvasClick }

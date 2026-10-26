@@ -8,6 +8,7 @@ const CANVAS_HEIGHT = 600
 
 type ExportFormat = 'PNG' | 'JPEG' | 'PDF' | 'SVG'
 type ExportScale = 1 | 2 | 3
+type BackgroundOption = 'transparent' | '#ffffff' | '#0f172a' | 'custom'
 
 interface ExportPanelProps {
   onClose: () => void
@@ -18,6 +19,8 @@ function ExportPanel({ onClose }: ExportPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const [format, setFormat] = useState<ExportFormat>('PNG')
   const [scale, setScale] = useState<ExportScale>(1)
+  const [bgOption, setBgOption] = useState<BackgroundOption>('transparent')
+  const [customBg, setCustomBg] = useState('#ffffff')
   const [isPreviewExpanded, setIsPreviewExpanded] = useState(true)
 
   const svg = exportToSVG(elements, CANVAS_WIDTH, CANVAS_HEIGHT)
@@ -39,17 +42,28 @@ function ExportPanel({ onClose }: ExportPanelProps) {
     }
   }, [onClose])
 
+  const getEffectiveBg = (currentFormat: ExportFormat): string | undefined => {
+    if (currentFormat === 'PNG') {
+      if (bgOption === 'transparent') return undefined
+      if (bgOption === 'custom') return customBg
+      return bgOption
+    }
+    // JPEG/PDF don't support alpha channel in standard usage
+    if (bgOption === 'transparent' || bgOption === '#ffffff') return '#ffffff'
+    if (bgOption === 'custom') return customBg
+    return bgOption
+  }
+
   const handleExport = async () => {
-    const width = format === 'SVG' ? CANVAS_WIDTH : CANVAS_WIDTH * scale
-    const height = format === 'SVG' ? CANVAS_HEIGHT : CANVAS_HEIGHT * scale
     let blob: Blob
+    const effectiveBg = getEffectiveBg(format)
 
     if (format === 'SVG') {
-      blob = new Blob([exportToSVG(elements, width, height)], { type: 'image/svg+xml' })
+      blob = new Blob([exportToSVG(elements, CANVAS_WIDTH, CANVAS_HEIGHT)], { type: 'image/svg+xml' })
     } else if (format === 'PNG') {
-      blob = await exportToPNG(elements, width, height, '#ffffff')
+      blob = await exportToPNG(elements, CANVAS_WIDTH, CANVAS_HEIGHT, effectiveBg, scale)
     } else if (format === 'JPEG') {
-      blob = await exportToJPEG(elements, CANVAS_WIDTH, CANVAS_HEIGHT, scale)
+      blob = await exportToJPEG(elements, CANVAS_WIDTH, CANVAS_HEIGHT, scale, 0.92, effectiveBg ?? '#ffffff')
     } else {
       blob = await exportToPDF(elements, CANVAS_WIDTH, CANVAS_HEIGHT, scale)
     }
@@ -65,6 +79,10 @@ function ExportPanel({ onClose }: ExportPanelProps) {
     URL.revokeObjectURL(url)
     onClose()
   }
+
+  const previewBgStyle = format === 'PNG' && bgOption === 'transparent'
+    ? { backgroundImage: 'linear-gradient(45deg, #e2e8f0 25%, transparent 25%), linear-gradient(-45deg, #e2e8f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e2e8f0 75%), linear-gradient(-45deg, transparent 75%, #e2e8f0 75%)', backgroundSize: '16px 16px', backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px' }
+    : { backgroundColor: getEffectiveBg(format) ?? '#ffffff' }
 
   return (
     <div
@@ -101,6 +119,35 @@ function ExportPanel({ onClose }: ExportPanelProps) {
         </label>
       </div>
 
+      {(format === 'PNG' || format === 'JPEG') && (
+        <div className="mt-2.5">
+          <label className="block text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+            Background
+            <div className="mt-1 flex items-center gap-1.5">
+              <select
+                value={bgOption}
+                onChange={(event) => setBgOption(event.target.value as BackgroundOption)}
+                className="block h-9 flex-1 rounded border border-slate-200 bg-white px-2 text-sm font-normal normal-case tracking-normal text-slate-700 outline-none focus:border-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              >
+                {format === 'PNG' && <option value="transparent">Transparent</option>}
+                <option value="#ffffff">White</option>
+                <option value="#0f172a">Dark</option>
+                <option value="custom">Custom Color</option>
+              </select>
+              {bgOption === 'custom' && (
+                <input
+                  type="color"
+                  value={customBg}
+                  onChange={(e) => setCustomBg(e.target.value)}
+                  className="h-9 w-9 cursor-pointer rounded border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-800"
+                  aria-label="Custom background color"
+                />
+              )}
+            </div>
+          </label>
+        </div>
+      )}
+
       <button
         type="button"
         onClick={() => void handleExport()}
@@ -123,7 +170,10 @@ function ExportPanel({ onClose }: ExportPanelProps) {
       </button>
 
       {isPreviewExpanded && (
-        <div className="mt-2 flex aspect-[4/3] items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-100 p-2 dark:border-slate-700 dark:bg-slate-800">
+        <div
+          style={previewBgStyle}
+          className="mt-2 flex aspect-[4/3] items-center justify-center overflow-hidden rounded border border-slate-200 p-2 dark:border-slate-700"
+        >
           <img
             src={previewSource}
             alt="Current canvas preview"
