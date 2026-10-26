@@ -93,6 +93,7 @@ interface EditorState {
   setActiveTool: (tool: Tool) => void
 
   addElement: (element: CanvasElement) => void
+  importElements: (elements: CanvasElement[]) => void
   updateElement: (id: string, changes: Partial<CanvasElement>, historyKey?: string) => void
   deleteElement: (id: string) => void
   clearCanvas: () => void
@@ -260,6 +261,33 @@ export const useEditorStore = create<EditorState>((set) => {
       const history = pushHistory(state)
       return {
         elements: [...state.elements, element],
+        ...history,
+      }
+    }),
+
+  importElements: (newElements) =>
+    set((state) => {
+      if (newElements.length === 0) return state
+
+      const preparedElements = newElements.map((element) => ({
+        ...element,
+        id: crypto.randomUUID(),
+        transform: { ...element.transform },
+        style: { ...element.style },
+        textStyle: { ...element.textStyle },
+        points: element.points?.map((point) => ({
+          ...point,
+          ...(point.handleOut ? { handleOut: { ...point.handleOut } } : {}),
+          ...(point.handleIn ? { handleIn: { ...point.handleIn } } : {}),
+        })),
+      }))
+
+      const history = pushHistory(state)
+      const importedIds = preparedElements.map((el) => el.id)
+
+      return {
+        elements: [...state.elements, ...preparedElements],
+        selectedElementIds: importedIds,
         ...history,
       }
     }),

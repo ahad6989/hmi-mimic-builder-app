@@ -129,6 +129,7 @@ export interface CanvasElement {
   points?: PathPoint[]  // Polyline / path anchor points
   pathData?: string       // SVG path 'd' attribute  (path / pencil only)
   textContent?: string    // Text element content    (text only)
+  childrenIds?: string[]  // Child element ids (group only)
 }
 
 // ---------------------------------------------------------------------------
